@@ -1,0 +1,13 @@
+DROP TABLE IF EXISTS reservation_preorder_items;
+DROP TRIGGER IF EXISTS reservations_set_updated_at ON reservations;
+DROP TABLE IF EXISTS reservations;
+DROP TABLE IF EXISTS table_waiter_assignments;
+DROP TRIGGER IF EXISTS venue_tables_set_updated_at ON venue_tables;
+DROP TABLE IF EXISTS venue_tables;
+DROP TRIGGER IF EXISTS venue_layouts_set_updated_at ON venue_layouts;
+DROP TABLE IF EXISTS venue_layouts;
+DROP TABLE IF EXISTS menu_item_images;
+DROP TRIGGER IF EXISTS menu_items_set_updated_at ON menu_items;
+DROP TABLE IF EXISTS menu_items;
+DROP TRIGGER IF EXISTS menu_categories_set_updated_at ON menu_categories;
+DROP TABLE IF EXISTS menu_categories;

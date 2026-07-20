@@ -1,0 +1,16 @@
+DROP TABLE IF EXISTS outbox_events;
+DROP TABLE IF EXISTS audit_logs;
+DROP TRIGGER IF EXISTS workspace_subscriptions_set_updated_at ON workspace_subscriptions;
+DROP TABLE IF EXISTS workspace_subscriptions;
+DROP TRIGGER IF EXISTS reviews_set_updated_at ON reviews;
+DROP TABLE IF EXISTS reviews;
+DROP TABLE IF EXISTS tips;
+DROP TABLE IF EXISTS payment_events;
+DROP TRIGGER IF EXISTS payments_set_updated_at ON payments;
+DROP TABLE IF EXISTS payments;
+DROP TRIGGER IF EXISTS order_items_set_updated_at ON order_items;
+DROP TABLE IF EXISTS order_items;
+DROP TRIGGER IF EXISTS orders_set_updated_at ON orders;
+DROP TABLE IF EXISTS orders;
+DROP TRIGGER IF EXISTS bills_set_updated_at ON bills;
+DROP TABLE IF EXISTS bills;

@@ -1,0 +1,13 @@
+DROP TRIGGER IF EXISTS venue_payment_accounts_set_updated_at ON venue_payment_accounts;
+DROP TABLE IF EXISTS venue_payment_accounts;
+DROP TABLE IF EXISTS venue_staff_permissions;
+DROP TRIGGER IF EXISTS venue_staff_set_updated_at ON venue_staff;
+DROP TABLE IF EXISTS venue_staff;
+DROP TRIGGER IF EXISTS venues_set_updated_at ON venues;
+DROP TABLE IF EXISTS venues;
+DROP TABLE IF EXISTS user_sessions;
+DROP TRIGGER IF EXISTS users_set_updated_at ON users;
+DROP TABLE IF EXISTS users;
+DROP FUNCTION IF EXISTS set_updated_at();
+DROP EXTENSION IF EXISTS btree_gist;
+DROP EXTENSION IF EXISTS pgcrypto;

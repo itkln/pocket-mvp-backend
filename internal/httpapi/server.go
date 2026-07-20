@@ -1,0 +1,143 @@
+package httpapi
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"runtime/debug"
+	"slices"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"pocket-mvp-backend/internal/buildinfo"
+)
+
+type Dependencies struct {
+	Database       *pgxpool.Pool
+	Logger         *slog.Logger
+	AllowedOrigins []string
+	Build          buildinfo.Info
+}
+
+type API struct {
+	database       *pgxpool.Pool
+	logger         *slog.Logger
+	allowedOrigins []string
+	build          buildinfo.Info
+	startedAt      time.Time
+}
+
+func New(deps Dependencies) http.Handler {
+	api := &API{
+		database:       deps.Database,
+		logger:         deps.Logger,
+		allowedOrigins: deps.AllowedOrigins,
+		build:          deps.Build,
+		startedAt:      time.Now().UTC(),
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", api.health)
+	mux.HandleFunc("GET /healthz", api.health)
+	mux.HandleFunc("GET /readyz", api.ready)
+	mux.HandleFunc("GET /api/v1", api.serviceInfo)
+
+	return api.recoverPanic(api.requestLogger(api.securityHeaders(api.cors(mux))))
+}
+
+func (api *API) health(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":  "ok",
+		"service": "pocket-mvp-backend",
+		"uptime":  time.Since(api.startedAt).Round(time.Second).String(),
+	})
+}
+
+func (api *API) ready(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	if err := api.database.Ping(ctx); err != nil {
+		api.logger.Warn("readiness check failed", "error", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+}
+
+func (api *API) serviceInfo(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name":  "Pocket API",
+		"build": api.build,
+	})
+}
+
+func (api *API) cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" && (slices.Contains(api.allowedOrigins, "*") || slices.Contains(api.allowedOrigins, origin)) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Vary", "Origin")
+		}
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (api *API) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (api *API) recoverPanic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				api.logger.Error("panic recovered", "error", recovered, "stack", string(debug.Stack()))
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_server_error"})
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (api *API) requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		api.logger.Info("http request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", recorder.status,
+			"duration_ms", time.Since(started).Milliseconds(),
+		)
+	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusRecorder) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
