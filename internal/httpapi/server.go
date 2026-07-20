@@ -11,14 +11,25 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"pocket-mvp-backend/internal/auth"
 	"pocket-mvp-backend/internal/buildinfo"
 )
+
+type AuthService interface {
+	Register(context.Context, auth.RegisterInput) (auth.User, auth.Session, error)
+	Login(context.Context, auth.LoginInput) (auth.User, auth.Session, error)
+	Authenticate(context.Context, string) (auth.User, error)
+	Logout(context.Context, string) error
+}
 
 type Dependencies struct {
 	Database       *pgxpool.Pool
 	Logger         *slog.Logger
 	AllowedOrigins []string
 	Build          buildinfo.Info
+	Auth           AuthService
+	SessionCookie  string
+	SessionSecure  bool
 }
 
 type API struct {
@@ -27,6 +38,9 @@ type API struct {
 	allowedOrigins []string
 	build          buildinfo.Info
 	startedAt      time.Time
+	auth           AuthService
+	sessionCookie  string
+	sessionSecure  bool
 }
 
 func New(deps Dependencies) http.Handler {
@@ -36,6 +50,9 @@ func New(deps Dependencies) http.Handler {
 		allowedOrigins: deps.AllowedOrigins,
 		build:          deps.Build,
 		startedAt:      time.Now().UTC(),
+		auth:           deps.Auth,
+		sessionCookie:  deps.SessionCookie,
+		sessionSecure:  deps.SessionSecure,
 	}
 
 	mux := http.NewServeMux()
@@ -43,6 +60,10 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /healthz", api.health)
 	mux.HandleFunc("GET /readyz", api.ready)
 	mux.HandleFunc("GET /api/v1", api.serviceInfo)
+	mux.HandleFunc("POST /api/v1/auth/register", api.register)
+	mux.HandleFunc("POST /api/v1/auth/login", api.login)
+	mux.HandleFunc("POST /api/v1/auth/logout", api.logout)
+	mux.HandleFunc("GET /api/v1/auth/me", api.me)
 
 	return api.recoverPanic(api.requestLogger(api.securityHeaders(api.cors(mux))))
 }
@@ -76,15 +97,24 @@ func (api *API) serviceInfo(w http.ResponseWriter, _ *http.Request) {
 func (api *API) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" && (slices.Contains(api.allowedOrigins, "*") || slices.Contains(api.allowedOrigins, origin)) {
+		originAllowed := origin != "" && slices.Contains(api.allowedOrigins, origin)
+		if originAllowed {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Vary", "Origin")
 		}
 		if r.Method == http.MethodOptions {
+			if origin != "" && !originAllowed {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "origin_not_allowed"})
+				return
+			}
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
 			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if origin != "" && r.Method != http.MethodGet && r.Method != http.MethodHead && !originAllowed {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "origin_not_allowed"})
 			return
 		}
 		next.ServeHTTP(w, r)

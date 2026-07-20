@@ -11,6 +11,8 @@ payments, and operations.
 - Versioned SQL migrations executed before the API starts.
 - Production Next.js frontend image from the sibling `frontend` repository.
 - Health-gated startup: PostgreSQL -> migrations -> backend -> frontend.
+- Secure account authentication with Argon2id password hashes, encrypted personal
+  data, rate-limited login attempts, and revocable HttpOnly cookie sessions.
 
 ## Run the complete stack
 
@@ -69,3 +71,34 @@ Required environment:
 - `DATABASE_URL`: PostgreSQL connection URL.
 
 Optional environment is documented in `.env.example`.
+
+## Authentication
+
+Endpoints under `/api/v1/auth`:
+
+- `POST /register` creates a customer or venue-owner account and session.
+- `POST /login` verifies credentials and creates a new session.
+- `GET /me` returns the user represented by the HttpOnly session cookie.
+- `POST /logout` revokes the session and clears the cookie.
+
+Passwords are hashed with Argon2id. E-mail, first name, last name, and phone are
+encrypted with AES-256-GCM; a separate HMAC-SHA256 blind index supports exact
+e-mail lookup without storing searchable plaintext. Session tokens are returned
+only in cookies, while PostgreSQL stores their SHA-256 hashes.
+
+Generate independent production keys and enable secure cookies behind HTTPS:
+
+```bash
+openssl rand -base64 32 # DATA_ENCRYPTION_KEY
+openssl rand -base64 32 # DATA_LOOKUP_KEY
+COOKIE_SECURE=true
+```
+
+Never reuse the example development keys outside local development. Rotating the
+encryption key requires a planned data re-encryption migration.
+
+## Tests
+
+```bash
+go test ./...
+```

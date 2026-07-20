@@ -10,10 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"pocket-mvp-backend/internal/auth"
 	"pocket-mvp-backend/internal/buildinfo"
 	"pocket-mvp-backend/internal/config"
 	"pocket-mvp-backend/internal/database"
 	"pocket-mvp-backend/internal/httpapi"
+	"pocket-mvp-backend/internal/security"
 )
 
 func main() {
@@ -38,11 +40,25 @@ func main() {
 	}
 	defer db.Close()
 
+	protector, err := security.NewDataProtector(cfg.DataEncryptionKey, cfg.DataLookupKey)
+	if err != nil {
+		logger.Error("initialize data protection", "error", err)
+		os.Exit(1)
+	}
+	authService, err := auth.NewService(db, protector, cfg.SessionTTL)
+	if err != nil {
+		logger.Error("initialize authentication", "error", err)
+		os.Exit(1)
+	}
+
 	handler := httpapi.New(httpapi.Dependencies{
 		Database:       db,
 		Logger:         logger,
 		AllowedOrigins: cfg.AllowedOrigins,
 		Build:          buildinfo.Current(),
+		Auth:           authService,
+		SessionCookie:  cfg.SessionCookieName,
+		SessionSecure:  cfg.CookieSecure,
 	})
 	server := &http.Server{
 		Addr:              cfg.HTTPAddress,

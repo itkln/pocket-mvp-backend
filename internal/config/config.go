@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"os"
@@ -18,6 +19,11 @@ type Config struct {
 	ShutdownTimeout        time.Duration
 	AllowedOrigins         []string
 	LogLevel               slog.Level
+	DataEncryptionKey      []byte
+	DataLookupKey          []byte
+	SessionCookieName      string
+	SessionTTL             time.Duration
+	CookieSecure           bool
 }
 
 func Load() (Config, error) {
@@ -39,6 +45,22 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	sessionTTL, err := durationEnv("SESSION_TTL", 30*24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	encryptionKey, err := base64KeyEnv("DATA_ENCRYPTION_KEY", 32)
+	if err != nil {
+		return Config{}, err
+	}
+	lookupKey, err := base64KeyEnv("DATA_LOOKUP_KEY", 32)
+	if err != nil {
+		return Config{}, err
+	}
+	cookieSecure, err := boolEnv("COOKIE_SECURE", false)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Environment:            stringEnv("APP_ENV", "development"),
@@ -49,7 +71,36 @@ func Load() (Config, error) {
 		ShutdownTimeout:        shutdownTimeout,
 		AllowedOrigins:         csvEnv("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
 		LogLevel:               logLevelEnv("LOG_LEVEL", slog.LevelInfo),
+		DataEncryptionKey:      encryptionKey,
+		DataLookupKey:          lookupKey,
+		SessionCookieName:      stringEnv("SESSION_COOKIE_NAME", "pocket_session"),
+		SessionTTL:             sessionTTL,
+		CookieSecure:           cookieSecure,
 	}, nil
+}
+
+func base64KeyEnv(key string, minimumBytes int) ([]byte, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return nil, errors.New(key + " is required")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil || len(decoded) < minimumBytes {
+		return nil, errors.New(key + " must be base64 encoding of at least " + strconv.Itoa(minimumBytes) + " bytes")
+	}
+	return decoded, nil
+}
+
+func boolEnv(key string, fallback bool) (bool, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, errors.New(key + " must be true or false")
+	}
+	return parsed, nil
 }
 
 func stringEnv(key, fallback string) string {
