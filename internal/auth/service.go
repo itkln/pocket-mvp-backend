@@ -31,7 +31,6 @@ type RegisterInput struct {
 	Email     string
 	Phone     string
 	Password  string
-	Role      string
 	UserAgent string
 	IPAddress string
 }
@@ -44,12 +43,13 @@ type LoginInput struct {
 }
 
 type User struct {
-	ID        string `json:"id"`
-	Email     string `json:"email"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Phone     string `json:"phone,omitempty"`
-	Role      string `json:"role"`
+	ID           string   `json:"id"`
+	Email        string   `json:"email"`
+	FirstName    string   `json:"first_name"`
+	LastName     string   `json:"last_name"`
+	Phone        string   `json:"phone,omitempty"`
+	Role         string   `json:"role"`
+	Capabilities []string `json:"capabilities"`
 }
 
 type Session struct {
@@ -77,8 +77,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (User, Sess
 	input.LastName = strings.TrimSpace(input.LastName)
 	input.Phone = strings.TrimSpace(input.Phone)
 	input.Email = security.NormalizeEmail(input.Email)
-	role := normalizeRole(input.Role)
-	if !validName(input.FirstName) || !validName(input.LastName) || !validEmail(input.Email) || !validPassword(input.Password) || role == "" || utf8.RuneCountInString(input.Phone) > 40 {
+	if !validName(input.FirstName) || !validName(input.LastName) || !validEmail(input.Email) || !validPassword(input.Password) || utf8.RuneCountInString(input.Phone) > 40 {
 		return User{}, Session{}, ErrInvalidInput
 	}
 
@@ -118,7 +117,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (User, Sess
 		INSERT INTO users (email, email_lookup, password_hash, first_name, last_name, phone, account_role)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id::text`,
-		emailEncrypted, s.protector.Lookup(input.Email), passwordHash, firstNameEncrypted, lastNameEncrypted, phoneEncrypted, role,
+		emailEncrypted, s.protector.Lookup(input.Email), passwordHash, firstNameEncrypted, lastNameEncrypted, phoneEncrypted, "customer",
 	).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -135,7 +134,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (User, Sess
 	if err := tx.Commit(ctx); err != nil {
 		return User{}, Session{}, fmt.Errorf("commit registration: %w", err)
 	}
-	return User{ID: id, Email: input.Email, FirstName: input.FirstName, LastName: input.LastName, Phone: input.Phone, Role: role}, session, nil
+	return User{ID: id, Email: input.Email, FirstName: input.FirstName, LastName: input.LastName, Phone: input.Phone, Role: "customer", Capabilities: []string{"customer"}}, session, nil
 }
 
 func (s *Service) Login(ctx context.Context, input LoginInput) (User, Session, error) {
@@ -199,6 +198,10 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (User, Session, e
 	if err := tx.Commit(ctx); err != nil {
 		return User{}, Session{}, err
 	}
+	user.Capabilities, err = s.capabilities(ctx, user.ID)
+	if err != nil {
+		return User{}, Session{}, err
+	}
 	return user, session, nil
 }
 
@@ -221,7 +224,30 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 	if err != nil {
 		return User{}, fmt.Errorf("authenticate session: %w", err)
 	}
-	return s.decryptUser(id, emailEncrypted, firstNameEncrypted, lastNameEncrypted, phoneEncrypted, role)
+	user, err := s.decryptUser(id, emailEncrypted, firstNameEncrypted, lastNameEncrypted, phoneEncrypted, role)
+	if err != nil {
+		return User{}, err
+	}
+	user.Capabilities, err = s.capabilities(ctx, user.ID)
+	return user, err
+}
+
+func (s *Service) capabilities(ctx context.Context, userID string) ([]string, error) {
+	capabilities := []string{"customer"}
+	var ownsVenue, worksAtVenue bool
+	if err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM venues WHERE owner_user_id = $1 AND deleted_at IS NULL)`, userID).Scan(&ownsVenue); err != nil {
+		return nil, fmt.Errorf("load owner capability: %w", err)
+	}
+	if err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM venue_staff WHERE user_id = $1 AND status = 'active')`, userID).Scan(&worksAtVenue); err != nil {
+		return nil, fmt.Errorf("load staff capability: %w", err)
+	}
+	if ownsVenue {
+		capabilities = append(capabilities, "owner")
+	}
+	if worksAtVenue {
+		capabilities = append(capabilities, "staff")
+	}
+	return capabilities, nil
 }
 
 func (s *Service) Logout(ctx context.Context, token string) error {
@@ -299,17 +325,6 @@ func validEmail(value string) bool {
 func validPassword(value string) bool {
 	length := utf8.RuneCountInString(value)
 	return length >= 12 && length <= 128
-}
-
-func normalizeRole(role string) string {
-	switch role {
-	case "customer":
-		return "customer"
-	case "owner", "venue_owner":
-		return "venue_owner"
-	default:
-		return ""
-	}
 }
 
 func normalizedIP(value string) string {

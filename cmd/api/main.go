@@ -15,6 +15,7 @@ import (
 	"pocket-mvp-backend/internal/config"
 	"pocket-mvp-backend/internal/database"
 	"pocket-mvp-backend/internal/httpapi"
+	"pocket-mvp-backend/internal/owner"
 	"pocket-mvp-backend/internal/security"
 )
 
@@ -50,6 +51,7 @@ func main() {
 		logger.Error("initialize authentication", "error", err)
 		os.Exit(1)
 	}
+	ownerService := owner.NewService(db)
 
 	handler := httpapi.New(httpapi.Dependencies{
 		Database:       db,
@@ -57,6 +59,7 @@ func main() {
 		AllowedOrigins: cfg.AllowedOrigins,
 		Build:          buildinfo.Current(),
 		Auth:           authService,
+		Owner:          ownerService,
 		SessionCookie:  cfg.SessionCookieName,
 		SessionSecure:  cfg.CookieSecure,
 	})

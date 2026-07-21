@@ -13,6 +13,7 @@ import (
 
 	"pocket-mvp-backend/internal/auth"
 	"pocket-mvp-backend/internal/buildinfo"
+	"pocket-mvp-backend/internal/owner"
 )
 
 type AuthService interface {
@@ -22,12 +23,42 @@ type AuthService interface {
 	Logout(context.Context, string) error
 }
 
+type OwnerService interface {
+	ListVenues(context.Context, string) ([]owner.Venue, error)
+	CreateVenue(context.Context, string, owner.VenueInput) (owner.Venue, error)
+	UpdateVenue(context.Context, string, string, owner.VenueInput) (owner.Venue, error)
+	DeleteVenue(context.Context, string, string) error
+	Dashboard(context.Context, string, string) (owner.Dashboard, error)
+	ListCategories(context.Context, string, string) ([]owner.Category, error)
+	CreateCategory(context.Context, string, string, owner.CategoryInput) (owner.Category, error)
+	UpdateCategory(context.Context, string, string, string, owner.CategoryInput) (owner.Category, error)
+	DeleteCategory(context.Context, string, string, string) error
+	ListMenuItems(context.Context, string, string) ([]owner.MenuItem, error)
+	CreateMenuItem(context.Context, string, string, owner.MenuItemInput) (owner.MenuItem, error)
+	UpdateMenuItem(context.Context, string, string, string, owner.MenuItemInput) (owner.MenuItem, error)
+	DeleteMenuItem(context.Context, string, string, string) error
+	ListStaff(context.Context, string, string) ([]owner.StaffMember, error)
+	CreateStaff(context.Context, string, string, owner.StaffInput) (owner.StaffMember, error)
+	UpdateStaff(context.Context, string, string, string, owner.StaffInput) (owner.StaffMember, error)
+	DeleteStaff(context.Context, string, string, string) error
+	ListOrders(context.Context, string, string) ([]owner.Order, error)
+	UpdateOrderStatus(context.Context, string, string, string, string) (owner.Order, error)
+	ListReviews(context.Context, string, string) ([]owner.Review, error)
+	ReplyReview(context.Context, string, string, string, string) (owner.Review, error)
+	ListPayments(context.Context, string, string) ([]owner.Payment, error)
+	GetFloorPlan(context.Context, string, string) (json.RawMessage, error)
+	SaveFloorPlan(context.Context, string, string, json.RawMessage) (json.RawMessage, error)
+	GetSubscription(context.Context, string) (*owner.Subscription, error)
+	UpsertSubscription(context.Context, string, owner.SubscriptionInput) (owner.Subscription, error)
+}
+
 type Dependencies struct {
 	Database       *pgxpool.Pool
 	Logger         *slog.Logger
 	AllowedOrigins []string
 	Build          buildinfo.Info
 	Auth           AuthService
+	Owner          OwnerService
 	SessionCookie  string
 	SessionSecure  bool
 }
@@ -39,6 +70,7 @@ type API struct {
 	build          buildinfo.Info
 	startedAt      time.Time
 	auth           AuthService
+	owner          OwnerService
 	sessionCookie  string
 	sessionSecure  bool
 }
@@ -51,6 +83,7 @@ func New(deps Dependencies) http.Handler {
 		build:          deps.Build,
 		startedAt:      time.Now().UTC(),
 		auth:           deps.Auth,
+		owner:          deps.Owner,
 		sessionCookie:  deps.SessionCookie,
 		sessionSecure:  deps.SessionSecure,
 	}
@@ -64,6 +97,22 @@ func New(deps Dependencies) http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/login", api.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", api.logout)
 	mux.HandleFunc("GET /api/v1/auth/me", api.me)
+	mux.HandleFunc("/api/v1/owner/venues", api.ownerVenues)
+	mux.HandleFunc("/api/v1/owner/venues/{venueID}", api.ownerVenue)
+	mux.HandleFunc("GET /api/v1/owner/venues/{venueID}/dashboard", api.ownerDashboard)
+	mux.HandleFunc("/api/v1/owner/venues/{venueID}/categories", api.ownerCategories)
+	mux.HandleFunc("/api/v1/owner/venues/{venueID}/categories/{resourceID}", api.ownerCategory)
+	mux.HandleFunc("/api/v1/owner/venues/{venueID}/menu-items", api.ownerMenuItems)
+	mux.HandleFunc("/api/v1/owner/venues/{venueID}/menu-items/{resourceID}", api.ownerMenuItem)
+	mux.HandleFunc("/api/v1/owner/venues/{venueID}/staff", api.ownerStaff)
+	mux.HandleFunc("/api/v1/owner/venues/{venueID}/staff/{resourceID}", api.ownerStaffMember)
+	mux.HandleFunc("GET /api/v1/owner/venues/{venueID}/orders", api.ownerOrders)
+	mux.HandleFunc("PATCH /api/v1/owner/venues/{venueID}/orders/{resourceID}", api.ownerOrder)
+	mux.HandleFunc("GET /api/v1/owner/venues/{venueID}/reviews", api.ownerReviews)
+	mux.HandleFunc("PATCH /api/v1/owner/venues/{venueID}/reviews/{resourceID}", api.ownerReview)
+	mux.HandleFunc("GET /api/v1/owner/venues/{venueID}/payments", api.ownerPayments)
+	mux.HandleFunc("/api/v1/owner/venues/{venueID}/floor-plan", api.ownerFloorPlan)
+	mux.HandleFunc("/api/v1/owner/subscription", api.ownerSubscription)
 
 	return api.recoverPanic(api.requestLogger(api.securityHeaders(api.cors(mux))))
 }

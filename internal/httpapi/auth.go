@@ -19,7 +19,6 @@ type registerRequest struct {
 	Email     string `json:"email"`
 	Phone     string `json:"phone"`
 	Password  string `json:"password"`
-	Role      string `json:"role"`
 }
 
 type loginRequest struct {
@@ -51,7 +50,6 @@ func (api *API) register(w http.ResponseWriter, r *http.Request) {
 		Email:     request.Email,
 		Phone:     request.Phone,
 		Password:  request.Password,
-		Role:      request.Role,
 		UserAgent: r.UserAgent(),
 		IPAddress: clientIP(r),
 	})

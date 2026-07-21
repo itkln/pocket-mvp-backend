@@ -46,7 +46,7 @@ func authHandler(service AuthService, secure bool) http.Handler {
 
 func TestRegisterSetsProtectedSessionCookie(t *testing.T) {
 	service := &fakeAuth{}
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(`{"first_name":"Denis","last_name":"Itkin","email":"denis@example.com","password":"a secure password","role":"customer"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(`{"first_name":"Denis","last_name":"Itkin","email":"denis@example.com","password":"a secure password"}`))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Origin", "http://localhost:3000")
 	response := httptest.NewRecorder()
@@ -61,6 +61,24 @@ func TestRegisterSetsProtectedSessionCookie(t *testing.T) {
 	}
 	if service.registerInput.Password != "a secure password" || service.registerInput.IPAddress == "" {
 		t.Fatal("request was not passed to auth service")
+	}
+}
+
+func TestRegisterDoesNotAcceptAccountRole(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", strings.NewReader(`{"first_name":"Denis","last_name":"Itkin","email":"denis@example.com","password":"a secure password","role":"owner"}`))
+	response := httptest.NewRecorder()
+	authHandler(&fakeAuth{}, false).ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected role field to be rejected, got %d", response.Code)
+	}
+}
+
+func TestOwnerAPIRequiresSession(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/owner/venues", nil)
+	response := httptest.NewRecorder()
+	authHandler(&fakeAuth{}, false).ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", response.Code)
 	}
 }
 
