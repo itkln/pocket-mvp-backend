@@ -10,37 +10,37 @@ import (
 	"testing"
 	"time"
 
-	"pocket-mvp-backend/internal/auth"
+	"pocket-mvp-backend/internal/modules/identity"
 )
 
 type fakeAuth struct {
-	registerInput auth.RegisterInput
+	registerInput identity.RegisterInput
 	registerErr   error
 	loginErr      error
 	authErr       error
 	logoutToken   string
 }
 
-func (f *fakeAuth) Register(_ context.Context, input auth.RegisterInput) (auth.User, auth.Session, error) {
+func (f *fakeAuth) Register(_ context.Context, input identity.RegisterInput) (identity.User, identity.Session, error) {
 	f.registerInput = input
-	return auth.User{ID: "user-1", Email: input.Email, FirstName: input.FirstName, LastName: input.LastName, Role: "customer"}, auth.Session{Token: "secret-session-token", ExpiresAt: time.Now().Add(time.Hour)}, f.registerErr
+	return identity.User{ID: "user-1", Email: input.Email, FirstName: input.FirstName, LastName: input.LastName, Role: "customer"}, identity.Session{Token: "secret-session-token", ExpiresAt: time.Now().Add(time.Hour)}, f.registerErr
 }
-func (f *fakeAuth) Login(_ context.Context, input auth.LoginInput) (auth.User, auth.Session, error) {
-	return auth.User{ID: "user-1", Email: input.Email, Role: "customer"}, auth.Session{Token: "secret-session-token", ExpiresAt: time.Now().Add(time.Hour)}, f.loginErr
+func (f *fakeAuth) Login(_ context.Context, input identity.LoginInput) (identity.User, identity.Session, error) {
+	return identity.User{ID: "user-1", Email: input.Email, Role: "customer"}, identity.Session{Token: "secret-session-token", ExpiresAt: time.Now().Add(time.Hour)}, f.loginErr
 }
-func (f *fakeAuth) Authenticate(_ context.Context, _ string) (auth.User, error) {
-	return auth.User{ID: "user-1", Email: "user@example.com", Role: "customer"}, f.authErr
+func (f *fakeAuth) Authenticate(_ context.Context, _ string) (identity.User, error) {
+	return identity.User{ID: "user-1", Email: "user@example.com", Role: "customer"}, f.authErr
 }
 func (f *fakeAuth) Logout(_ context.Context, token string) error {
 	f.logoutToken = token
 	return nil
 }
 
-func authHandler(service AuthService, secure bool) http.Handler {
+func authHandler(service IdentityService, secure bool) http.Handler {
 	return New(Dependencies{
 		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 		AllowedOrigins: []string{"http://localhost:3000"},
-		Auth:           service, SessionCookie: "pocket_session", SessionSecure: secure,
+		Identity:       service, SessionCookie: "pocket_session", SessionSecure: secure,
 	})
 }
 
@@ -83,7 +83,7 @@ func TestOwnerAPIRequiresSession(t *testing.T) {
 }
 
 func TestLoginDoesNotRevealCredentialFailure(t *testing.T) {
-	service := &fakeAuth{loginErr: auth.ErrInvalidCredentials}
+	service := &fakeAuth{loginErr: identity.ErrInvalidCredentials}
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"missing@example.com","password":"wrong password"}`))
 	response := httptest.NewRecorder()
 	authHandler(service, false).ServeHTTP(response, request)
@@ -112,7 +112,7 @@ func TestUnsafeCrossOriginRequestIsRejected(t *testing.T) {
 }
 
 func TestMeRequiresValidSession(t *testing.T) {
-	service := &fakeAuth{authErr: auth.ErrUnauthorized}
+	service := &fakeAuth{authErr: identity.ErrUnauthorized}
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
 	request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "expired"})
 	response := httptest.NewRecorder()
@@ -137,7 +137,7 @@ func TestLogoutRevokesAndClearsSession(t *testing.T) {
 }
 
 func TestLoginRateLimitError(t *testing.T) {
-	service := &fakeAuth{loginErr: auth.ErrTooManyAttempts}
+	service := &fakeAuth{loginErr: identity.ErrTooManyAttempts}
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"a@example.com","password":"wrong password"}`))
 	response := httptest.NewRecorder()
 	authHandler(service, false).ServeHTTP(response, request)

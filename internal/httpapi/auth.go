@@ -8,10 +8,24 @@ import (
 	"net/http"
 	"time"
 
-	"pocket-mvp-backend/internal/auth"
+	"pocket-mvp-backend/internal/modules/identity"
 )
 
 const maxAuthBody = 64 << 10
+
+func (api *API) currentUser(w http.ResponseWriter, r *http.Request) (identity.User, bool) {
+	cookie, err := r.Cookie(api.sessionCookie)
+	if err != nil {
+		api.writeAuthError(w, identity.ErrUnauthorized)
+		return identity.User{}, false
+	}
+	user, err := api.identity.Authenticate(r.Context(), cookie.Value)
+	if err != nil {
+		api.writeAuthError(w, err)
+		return identity.User{}, false
+	}
+	return user, true
+}
 
 type registerRequest struct {
 	FirstName string `json:"first_name"`
@@ -27,7 +41,7 @@ type loginRequest struct {
 }
 
 type authResponse struct {
-	User auth.User `json:"user"`
+	User identity.User `json:"user"`
 }
 
 type errorEnvelope struct {
@@ -44,7 +58,7 @@ func (api *API) register(w http.ResponseWriter, r *http.Request) {
 	if !decodeAuthJSON(w, r, &request) {
 		return
 	}
-	user, session, err := api.auth.Register(r.Context(), auth.RegisterInput{
+	user, session, err := api.identity.Register(r.Context(), identity.RegisterInput{
 		FirstName: request.FirstName,
 		LastName:  request.LastName,
 		Email:     request.Email,
@@ -67,7 +81,7 @@ func (api *API) login(w http.ResponseWriter, r *http.Request) {
 	if !decodeAuthJSON(w, r, &request) {
 		return
 	}
-	user, session, err := api.auth.Login(r.Context(), auth.LoginInput{
+	user, session, err := api.identity.Login(r.Context(), identity.LoginInput{
 		Email:     request.Email,
 		Password:  request.Password,
 		UserAgent: r.UserAgent(),
@@ -85,10 +99,10 @@ func (api *API) login(w http.ResponseWriter, r *http.Request) {
 func (api *API) me(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(api.sessionCookie)
 	if err != nil {
-		api.writeAuthError(w, auth.ErrUnauthorized)
+		api.writeAuthError(w, identity.ErrUnauthorized)
 		return
 	}
-	user, err := api.auth.Authenticate(r.Context(), cookie.Value)
+	user, err := api.identity.Authenticate(r.Context(), cookie.Value)
 	if err != nil {
 		api.writeAuthError(w, err)
 		return
@@ -99,7 +113,7 @@ func (api *API) me(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(api.sessionCookie); err == nil {
-		if err := api.auth.Logout(r.Context(), cookie.Value); err != nil {
+		if err := api.identity.Logout(r.Context(), cookie.Value); err != nil {
 			api.logger.Error("revoke session", "error", err)
 			api.writeAuthError(w, err)
 			return
@@ -113,7 +127,7 @@ func (api *API) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (api *API) setSessionCookie(w http.ResponseWriter, session auth.Session) {
+func (api *API) setSessionCookie(w http.ResponseWriter, session identity.Session) {
 	http.SetCookie(w, &http.Cookie{
 		Name: api.sessionCookie, Value: session.Token, Path: "/",
 		Expires: session.ExpiresAt, MaxAge: int(session.ExpiresAt.Sub(timeNow()).Seconds()),
@@ -140,15 +154,15 @@ func decodeAuthJSON(w http.ResponseWriter, r *http.Request, destination any) boo
 
 func (api *API) writeAuthError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, auth.ErrInvalidInput):
+	case errors.Is(err, identity.ErrInvalidInput):
 		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте поля формы. Пароль должен содержать от 12 до 128 символов")
-	case errors.Is(err, auth.ErrEmailAlreadyExists):
+	case errors.Is(err, identity.ErrEmailAlreadyExists):
 		writeAPIError(w, http.StatusConflict, "account_exists", "Аккаунт с таким e-mail уже существует")
-	case errors.Is(err, auth.ErrInvalidCredentials):
+	case errors.Is(err, identity.ErrInvalidCredentials):
 		writeAPIError(w, http.StatusUnauthorized, "invalid_credentials", "Неверный e-mail или пароль")
-	case errors.Is(err, auth.ErrTooManyAttempts):
+	case errors.Is(err, identity.ErrTooManyAttempts):
 		writeAPIError(w, http.StatusTooManyRequests, "too_many_attempts", "Слишком много попыток. Попробуйте через 15 минут")
-	case errors.Is(err, auth.ErrUnauthorized):
+	case errors.Is(err, identity.ErrUnauthorized):
 		writeAPIError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт")
 	default:
 		api.logger.Error("authentication request failed", "error", err)

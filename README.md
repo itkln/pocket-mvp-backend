@@ -14,6 +14,16 @@ payments, and operations.
 - Secure account authentication with Argon2id password hashes, encrypted personal
   data, rate-limited login attempts, and revocable HttpOnly cookie sessions.
 
+## Architecture
+
+The API is a modular monolith split into bounded contexts under
+`internal/modules`: identity, venues, catalog, workforce, ordering, feedback,
+billing, floor plan, and reporting. HTTP handlers depend on narrow interfaces,
+and an architecture test prevents domain modules from importing one another.
+
+See [docs/architecture.md](docs/architecture.md) for dependency rules, data
+ownership, and the path for extracting a module into a microservice.
+
 ## Run the complete stack
 
 ```bash
@@ -76,7 +86,8 @@ Optional environment is documented in `.env.example`.
 
 Endpoints under `/api/v1/auth`:
 
-- `POST /register` creates a customer or venue-owner account and session.
+- `POST /register` creates an account and session. Owner capability is added
+  when the user creates a venue.
 - `POST /login` verifies credentials and creates a new session.
 - `GET /me` returns the user represented by the HttpOnly session cookie.
 - `POST /logout` revokes the session and clears the cookie.
