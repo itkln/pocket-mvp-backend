@@ -107,7 +107,7 @@ func (s *Service) UpdateVenue(ctx context.Context, userID, venueID string, input
 	row := s.db.QueryRow(ctx, `
 		UPDATE venues SET name=$3,description=NULLIF($4,''),cuisine_type=NULLIF($5,''),phone=NULLIF($6,''),
 		 email=NULLIF($7,''),address_line1=$8,city=$9,postal_code=NULLIF($10,''),country_code=$11,
-		 timezone=$12,currency=$13,status=$14,settings=$15
+		 timezone=$12,currency=$13,status=$14,settings=settings || ($15::jsonb - 'floor_plan')
 		WHERE id=$2 AND owner_user_id=$1 AND deleted_at IS NULL
 		RETURNING id::text,name,slug,COALESCE(description,''),COALESCE(cuisine_type,''),COALESCE(phone,''),COALESCE(email,''),
 		 address_line1,city,COALESCE(postal_code,''),country_code,timezone,currency,status,settings,created_at`,
