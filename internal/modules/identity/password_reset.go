@@ -133,7 +133,7 @@ func (s *Service) ResetPassword(ctx context.Context, input PasswordResetConfirma
 
 func normalizeResetLocale(locale string) string {
 	switch strings.ToLower(strings.TrimSpace(locale)) {
-	case "ru", "uk", "sk":
+	case "ru", "ua", "uk", "sk":
 		return strings.ToLower(strings.TrimSpace(locale))
 	default:
 		return "en"

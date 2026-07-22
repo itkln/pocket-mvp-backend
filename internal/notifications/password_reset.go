@@ -61,7 +61,7 @@ func passwordResetBody(locale, resetURL string) string {
 	switch locale {
 	case "ru":
 		return "Вы запросили смену пароля Pocket. Ссылка действует ограниченное время:\r\n\r\n" + resetURL + "\r\n\r\nЕсли это были не вы, проигнорируйте письмо."
-	case "uk":
+	case "ua", "uk":
 		return "Ви запросили зміну пароля Pocket. Посилання діє обмежений час:\r\n\r\n" + resetURL + "\r\n\r\nЯкщо це були не ви, проігноруйте лист."
 	case "sk":
 		return "Požiadali ste o zmenu hesla Pocket. Odkaz je platný obmedzený čas:\r\n\r\n" + resetURL + "\r\n\r\nAk ste o zmenu nežiadali, tento e-mail ignorujte."
