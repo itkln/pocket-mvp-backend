@@ -24,6 +24,7 @@ import (
 	"pocket-mvp-backend/internal/modules/reporting"
 	"pocket-mvp-backend/internal/modules/venues"
 	"pocket-mvp-backend/internal/modules/workforce"
+	"pocket-mvp-backend/internal/notifications"
 	"pocket-mvp-backend/internal/security"
 )
 
@@ -56,7 +57,10 @@ func main() {
 	}
 	venueAuthorizer := access.NewVenueAuthorizer(db)
 	capabilityReader := access.NewCapabilityReader(db)
-	identityService, err := identity.NewService(db, protector, capabilityReader, cfg.SessionTTL)
+	resetSender := notifications.NewPasswordResetSender(logger, cfg.SMTPAddress, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
+	identityService, err := identity.NewService(db, protector, capabilityReader, cfg.SessionTTL, identity.PasswordResetOptions{
+		Sender: resetSender, BaseURL: cfg.AppBaseURL, TTL: cfg.PasswordResetTTL,
+	})
 	if err != nil {
 		logger.Error("initialize authentication", "error", err)
 		os.Exit(1)

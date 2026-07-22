@@ -40,6 +40,16 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+type passwordResetRequest struct {
+	Email  string `json:"email"`
+	Locale string `json:"locale"`
+}
+
+type passwordResetConfirmation struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
 type authResponse struct {
 	User identity.User `json:"user"`
 }
@@ -123,6 +133,47 @@ func (api *API) logout(w http.ResponseWriter, r *http.Request) {
 		Name: api.sessionCookie, Value: "", Path: "/", MaxAge: -1,
 		HttpOnly: true, Secure: api.sessionSecure, SameSite: http.SameSiteLaxMode,
 	})
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (api *API) requestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var request passwordResetRequest
+	if !decodeAuthJSON(w, r, &request) {
+		return
+	}
+	err := api.identity.RequestPasswordReset(r.Context(), identity.PasswordResetRequest{
+		Email: request.Email, Locale: request.Locale, IPAddress: clientIP(r),
+	})
+	if err != nil {
+		api.logger.Error("request password reset", "error", err)
+		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Не удалось выполнить запрос")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+func (api *API) resetPassword(w http.ResponseWriter, r *http.Request) {
+	var request passwordResetConfirmation
+	if !decodeAuthJSON(w, r, &request) {
+		return
+	}
+	err := api.identity.ResetPassword(r.Context(), identity.PasswordResetConfirmation{
+		Token: request.Token, Password: request.Password,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, identity.ErrInvalidResetToken):
+			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_reset_token", "Ссылка недействительна или устарела")
+		case errors.Is(err, identity.ErrInvalidInput):
+			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте введенные данные")
+		default:
+			api.logger.Error("reset password", "error", err)
+			writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Не удалось выполнить запрос")
+		}
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -91,11 +91,21 @@ Endpoints under `/api/v1/auth`:
 - `POST /login` verifies credentials and creates a new session.
 - `GET /me` returns the user represented by the HttpOnly session cookie.
 - `POST /logout` revokes the session and clears the cookie.
+- `POST /password-reset/request` accepts an e-mail and always returns the same
+  response, whether or not the account exists.
+- `POST /password-reset/confirm` consumes a single-use reset token, updates the
+  Argon2id password hash, and revokes every existing session for the account.
 
 Passwords are hashed with Argon2id. E-mail, first name, last name, and phone are
 encrypted with AES-256-GCM; a separate HMAC-SHA256 blind index supports exact
 e-mail lookup without storing searchable plaintext. Session tokens are returned
 only in cookies, while PostgreSQL stores their SHA-256 hashes.
+
+Password-reset tokens are also stored only as SHA-256 hashes and expire after
+30 minutes by default. In development, generated reset links are written to the
+backend log. Set `SMTP_ADDRESS`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and
+`SMTP_FROM` to deliver real e-mail; production startup requires SMTP to be
+configured.
 
 Generate independent production keys and enable secure cookies behind HTTPS:
 

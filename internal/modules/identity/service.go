@@ -19,18 +19,34 @@ type CapabilityReader interface {
 	ListCapabilities(context.Context, string) ([]string, error)
 }
 
+type PasswordResetSender interface {
+	SendPasswordReset(context.Context, string, string, string) error
+}
+
+type PasswordResetOptions struct {
+	Sender  PasswordResetSender
+	BaseURL string
+	TTL     time.Duration
+}
+
 type Service struct {
 	db           *pgxpool.Pool
 	protector    *security.DataProtector
 	capabilities CapabilityReader
 	ttl          time.Duration
 	dummyHash    string
+	resetSender  PasswordResetSender
+	resetBaseURL string
+	resetTTL     time.Duration
 }
 
-func NewService(db *pgxpool.Pool, protector *security.DataProtector, capabilities CapabilityReader, ttl time.Duration) (*Service, error) {
+func NewService(db *pgxpool.Pool, protector *security.DataProtector, capabilities CapabilityReader, ttl time.Duration, reset PasswordResetOptions) (*Service, error) {
 	dummyHash, err := security.HashPassword("dummy-password-never-used")
 	if err != nil {
 		return nil, err
+	}
+	if reset.Sender == nil || strings.TrimSpace(reset.BaseURL) == "" || reset.TTL <= 0 {
+		return nil, errors.New("password reset configuration is incomplete")
 	}
 	return &Service{
 		db:           db,
@@ -38,6 +54,9 @@ func NewService(db *pgxpool.Pool, protector *security.DataProtector, capabilitie
 		capabilities: capabilities,
 		ttl:          ttl,
 		dummyHash:    dummyHash,
+		resetSender:  reset.Sender,
+		resetBaseURL: strings.TrimRight(reset.BaseURL, "/"),
+		resetTTL:     reset.TTL,
 	}, nil
 }
 

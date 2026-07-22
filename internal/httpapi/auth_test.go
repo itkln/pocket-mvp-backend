@@ -19,6 +19,9 @@ type fakeAuth struct {
 	loginErr      error
 	authErr       error
 	logoutToken   string
+	resetRequest  identity.PasswordResetRequest
+	resetConfirm  identity.PasswordResetConfirmation
+	resetErr      error
 }
 
 func (f *fakeAuth) Register(_ context.Context, input identity.RegisterInput) (identity.User, identity.Session, error) {
@@ -34,6 +37,14 @@ func (f *fakeAuth) Authenticate(_ context.Context, _ string) (identity.User, err
 func (f *fakeAuth) Logout(_ context.Context, token string) error {
 	f.logoutToken = token
 	return nil
+}
+func (f *fakeAuth) RequestPasswordReset(_ context.Context, input identity.PasswordResetRequest) error {
+	f.resetRequest = input
+	return f.resetErr
+}
+func (f *fakeAuth) ResetPassword(_ context.Context, input identity.PasswordResetConfirmation) error {
+	f.resetConfirm = input
+	return f.resetErr
 }
 
 func authHandler(service IdentityService, secure bool) http.Handler {
@@ -143,5 +154,41 @@ func TestLoginRateLimitError(t *testing.T) {
 	authHandler(service, false).ServeHTTP(response, request)
 	if response.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429, got %d", response.Code)
+	}
+}
+
+func TestPasswordResetRequestUsesNonEnumeratingResponse(t *testing.T) {
+	service := &fakeAuth{}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-reset/request", strings.NewReader(`{"email":"user@example.com","locale":"uk"}`))
+	response := httptest.NewRecorder()
+	authHandler(service, false).ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted || service.resetRequest.Email != "user@example.com" || service.resetRequest.Locale != "uk" {
+		t.Fatalf("unexpected reset request response: status=%d input=%#v", response.Code, service.resetRequest)
+	}
+	if strings.Contains(strings.ToLower(response.Body.String()), "email") {
+		t.Fatal("password reset response must not reveal account information")
+	}
+}
+
+func TestPasswordResetRejectsExpiredToken(t *testing.T) {
+	service := &fakeAuth{resetErr: identity.ErrInvalidResetToken}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-reset/confirm", strings.NewReader(`{"token":"expired-token-value-that-is-long-enough","password":"a new secure password"}`))
+	response := httptest.NewRecorder()
+	authHandler(service, false).ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "invalid_reset_token") {
+		t.Fatalf("unexpected reset response %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestPasswordResetAcceptsNewPassword(t *testing.T) {
+	service := &fakeAuth{}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-reset/confirm", strings.NewReader(`{"token":"valid-token-value-that-is-long-enough","password":"a new secure password"}`))
+	response := httptest.NewRecorder()
+	authHandler(service, false).ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent || service.resetConfirm.Password != "a new secure password" {
+		t.Fatalf("unexpected reset response: status=%d input=%#v", response.Code, service.resetConfirm)
 	}
 }

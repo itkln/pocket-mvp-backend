@@ -24,6 +24,8 @@ type IdentityService interface {
 	Login(context.Context, identity.LoginInput) (identity.User, identity.Session, error)
 	Authenticate(context.Context, string) (identity.User, error)
 	Logout(context.Context, string) error
+	RequestPasswordReset(context.Context, identity.PasswordResetRequest) error
+	ResetPassword(context.Context, identity.PasswordResetConfirmation) error
 }
 
 type VenueService interface {

@@ -13,6 +13,8 @@ func (api *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/login", api.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", api.logout)
 	mux.HandleFunc("GET /api/v1/auth/me", api.me)
+	mux.HandleFunc("POST /api/v1/auth/password-reset/request", api.requestPasswordReset)
+	mux.HandleFunc("POST /api/v1/auth/password-reset/confirm", api.resetPassword)
 
 	mux.HandleFunc("/api/v1/owner/venues", api.ownerVenues)
 	mux.HandleFunc("/api/v1/owner/venues/{venueID}", api.ownerVenue)

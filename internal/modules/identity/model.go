@@ -11,6 +11,7 @@ var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrTooManyAttempts    = errors.New("too many login attempts")
 	ErrUnauthorized       = errors.New("unauthorized")
+	ErrInvalidResetToken  = errors.New("invalid or expired password reset token")
 )
 
 type RegisterInput struct {
@@ -28,6 +29,17 @@ type LoginInput struct {
 	Password  string
 	UserAgent string
 	IPAddress string
+}
+
+type PasswordResetRequest struct {
+	Email     string
+	Locale    string
+	IPAddress string
+}
+
+type PasswordResetConfirmation struct {
+	Token    string
+	Password string
 }
 
 type User struct {

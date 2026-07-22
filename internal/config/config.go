@@ -24,6 +24,12 @@ type Config struct {
 	SessionCookieName      string
 	SessionTTL             time.Duration
 	CookieSecure           bool
+	AppBaseURL             string
+	PasswordResetTTL       time.Duration
+	SMTPAddress            string
+	SMTPUsername           string
+	SMTPPassword           string
+	SMTPFrom               string
 }
 
 func Load() (Config, error) {
@@ -49,6 +55,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	passwordResetTTL, err := durationEnv("PASSWORD_RESET_TTL", 30*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
 	encryptionKey, err := base64KeyEnv("DATA_ENCRYPTION_KEY", 32)
 	if err != nil {
 		return Config{}, err
@@ -61,9 +71,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	environment := stringEnv("APP_ENV", "development")
+	smtpAddress := strings.TrimSpace(os.Getenv("SMTP_ADDRESS"))
+	if environment != "development" && smtpAddress == "" {
+		return Config{}, errors.New("SMTP_ADDRESS is required outside development")
+	}
 
 	return Config{
-		Environment:            stringEnv("APP_ENV", "development"),
+		Environment:            environment,
 		HTTPAddress:            stringEnv("HTTP_ADDRESS", ":8080"),
 		DatabaseURL:            databaseURL,
 		DatabaseMaxConnections: maxConnections,
@@ -76,6 +91,12 @@ func Load() (Config, error) {
 		SessionCookieName:      stringEnv("SESSION_COOKIE_NAME", "pocket_session"),
 		SessionTTL:             sessionTTL,
 		CookieSecure:           cookieSecure,
+		AppBaseURL:             stringEnv("APP_BASE_URL", "http://localhost:3000"),
+		PasswordResetTTL:       passwordResetTTL,
+		SMTPAddress:            smtpAddress,
+		SMTPUsername:           strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
+		SMTPPassword:           os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:               stringEnv("SMTP_FROM", "no-reply@localhost"),
 	}, nil
 }
 
