@@ -39,3 +39,12 @@ type MenuItemInput struct {
 	SortOrder   int    `json:"sort_order"`
 	ImageURL    string `json:"image_url"`
 }
+
+type ReorderInput struct {
+	IDs []string `json:"ids"`
+}
+
+type ReorderMenuItemsInput struct {
+	CategoryID string   `json:"category_id"`
+	IDs        []string `json:"ids"`
+}

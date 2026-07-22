@@ -26,6 +26,7 @@ type IdentityService interface {
 	Logout(context.Context, string) error
 	RequestPasswordReset(context.Context, identity.PasswordResetRequest) error
 	ResetPassword(context.Context, identity.PasswordResetConfirmation) error
+	ChangePassword(context.Context, identity.ChangePasswordInput) error
 }
 
 type VenueService interface {
@@ -40,10 +41,12 @@ type CatalogService interface {
 	CreateCategory(context.Context, string, string, catalog.CategoryInput) (catalog.Category, error)
 	UpdateCategory(context.Context, string, string, string, catalog.CategoryInput) (catalog.Category, error)
 	DeleteCategory(context.Context, string, string, string) error
+	ReorderCategories(context.Context, string, string, []string) error
 	ListMenuItems(context.Context, string, string) ([]catalog.MenuItem, error)
 	CreateMenuItem(context.Context, string, string, catalog.MenuItemInput) (catalog.MenuItem, error)
 	UpdateMenuItem(context.Context, string, string, string, catalog.MenuItemInput) (catalog.MenuItem, error)
 	DeleteMenuItem(context.Context, string, string, string) error
+	ReorderMenuItems(context.Context, string, string, string, []string) error
 }
 
 type WorkforceService interface {

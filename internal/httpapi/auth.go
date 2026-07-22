@@ -50,6 +50,11 @@ type passwordResetConfirmation struct {
 	Password string `json:"password"`
 }
 
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 type authResponse struct {
 	User identity.User `json:"user"`
 }
@@ -178,6 +183,32 @@ func (api *API) resetPassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (api *API) changePassword(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	cookie, err := r.Cookie(api.sessionCookie)
+	if err != nil {
+		api.writeAuthError(w, identity.ErrUnauthorized)
+		return
+	}
+	var request changePasswordRequest
+	if !decodeAuthJSON(w, r, &request) {
+		return
+	}
+	err = api.identity.ChangePassword(r.Context(), identity.ChangePasswordInput{
+		UserID: user.ID, SessionToken: cookie.Value,
+		CurrentPassword: request.CurrentPassword, NewPassword: request.NewPassword,
+	})
+	if err != nil {
+		api.writeAuthError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (api *API) setSessionCookie(w http.ResponseWriter, session identity.Session) {
 	http.SetCookie(w, &http.Cookie{
 		Name: api.sessionCookie, Value: session.Token, Path: "/",
@@ -211,6 +242,8 @@ func (api *API) writeAuthError(w http.ResponseWriter, err error) {
 		writeAPIError(w, http.StatusConflict, "account_exists", "Аккаунт с таким e-mail уже существует")
 	case errors.Is(err, identity.ErrInvalidCredentials):
 		writeAPIError(w, http.StatusUnauthorized, "invalid_credentials", "Неверный e-mail или пароль")
+	case errors.Is(err, identity.ErrInvalidCurrentPassword):
+		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_current_password", "Текущий пароль указан неверно")
 	case errors.Is(err, identity.ErrTooManyAttempts):
 		writeAPIError(w, http.StatusTooManyRequests, "too_many_attempts", "Слишком много попыток. Попробуйте через 15 минут")
 	case errors.Is(err, identity.ErrUnauthorized):

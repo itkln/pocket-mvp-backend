@@ -6,12 +6,13 @@ import (
 )
 
 var (
-	ErrInvalidInput       = errors.New("invalid input")
-	ErrEmailAlreadyExists = errors.New("email already exists")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrTooManyAttempts    = errors.New("too many login attempts")
-	ErrUnauthorized       = errors.New("unauthorized")
-	ErrInvalidResetToken  = errors.New("invalid or expired password reset token")
+	ErrInvalidInput           = errors.New("invalid input")
+	ErrEmailAlreadyExists     = errors.New("email already exists")
+	ErrInvalidCredentials     = errors.New("invalid credentials")
+	ErrTooManyAttempts        = errors.New("too many login attempts")
+	ErrUnauthorized           = errors.New("unauthorized")
+	ErrInvalidResetToken      = errors.New("invalid or expired password reset token")
+	ErrInvalidCurrentPassword = errors.New("invalid current password")
 )
 
 type RegisterInput struct {
@@ -40,6 +41,13 @@ type PasswordResetRequest struct {
 type PasswordResetConfirmation struct {
 	Token    string
 	Password string
+}
+
+type ChangePasswordInput struct {
+	UserID          string
+	SessionToken    string
+	CurrentPassword string
+	NewPassword     string
 }
 
 type User struct {

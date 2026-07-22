@@ -65,6 +65,22 @@ func (api *API) ownerCategory(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (api *API) ownerCategoryOrder(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	var input catalog.ReorderInput
+	if !decodeOwnerJSON(w, r, &input) {
+		return
+	}
+	if err := api.catalog.ReorderCategories(r.Context(), user.ID, r.PathValue("venueID"), input.IDs); err != nil {
+		api.writeOwnerError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (api *API) ownerMenuItems(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
@@ -122,4 +138,20 @@ func (api *API) ownerMenuItem(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (api *API) ownerMenuItemOrder(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	var input catalog.ReorderMenuItemsInput
+	if !decodeOwnerJSON(w, r, &input) {
+		return
+	}
+	if err := api.catalog.ReorderMenuItems(r.Context(), user.ID, r.PathValue("venueID"), input.CategoryID, input.IDs); err != nil {
+		api.writeOwnerError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

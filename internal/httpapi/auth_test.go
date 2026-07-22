@@ -22,6 +22,8 @@ type fakeAuth struct {
 	resetRequest  identity.PasswordResetRequest
 	resetConfirm  identity.PasswordResetConfirmation
 	resetErr      error
+	changeInput   identity.ChangePasswordInput
+	changeErr     error
 }
 
 func (f *fakeAuth) Register(_ context.Context, input identity.RegisterInput) (identity.User, identity.Session, error) {
@@ -45,6 +47,10 @@ func (f *fakeAuth) RequestPasswordReset(_ context.Context, input identity.Passwo
 func (f *fakeAuth) ResetPassword(_ context.Context, input identity.PasswordResetConfirmation) error {
 	f.resetConfirm = input
 	return f.resetErr
+}
+func (f *fakeAuth) ChangePassword(_ context.Context, input identity.ChangePasswordInput) error {
+	f.changeInput = input
+	return f.changeErr
 }
 
 func authHandler(service IdentityService, secure bool) http.Handler {
@@ -190,5 +196,32 @@ func TestPasswordResetAcceptsNewPassword(t *testing.T) {
 
 	if response.Code != http.StatusNoContent || service.resetConfirm.Password != "a new secure password" {
 		t.Fatalf("unexpected reset response: status=%d input=%#v", response.Code, service.resetConfirm)
+	}
+}
+
+func TestChangePasswordUsesAuthenticatedUserAndCurrentSession(t *testing.T) {
+	service := &fakeAuth{}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password/change", strings.NewReader(`{"current_password":"old secure password","new_password":"new secure password"}`))
+	request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-token"})
+	response := httptest.NewRecorder()
+	authHandler(service, false).ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("unexpected response: status=%d body=%s", response.Code, response.Body.String())
+	}
+	if service.changeInput.UserID != "user-1" || service.changeInput.SessionToken != "active-token" || service.changeInput.CurrentPassword != "old secure password" || service.changeInput.NewPassword != "new secure password" {
+		t.Fatalf("unexpected change password input: %#v", service.changeInput)
+	}
+}
+
+func TestChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
+	service := &fakeAuth{changeErr: identity.ErrInvalidCurrentPassword}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password/change", strings.NewReader(`{"current_password":"wrong password","new_password":"new secure password"}`))
+	request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-token"})
+	response := httptest.NewRecorder()
+	authHandler(service, false).ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "invalid_current_password") {
+		t.Fatalf("unexpected response %d: %s", response.Code, response.Body.String())
 	}
 }

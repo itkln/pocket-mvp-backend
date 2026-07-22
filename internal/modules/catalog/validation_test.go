@@ -11,3 +11,12 @@ func TestMenuItemRequiresCategory(t *testing.T) {
 		t.Fatalf("currency was not normalized: %q", input.Currency)
 	}
 }
+
+func TestCatalogOrderRejectsEmptyAndDuplicateIDs(t *testing.T) {
+	if validOrder(nil) || validOrder([]string{"one", "one"}) || validOrder([]string{"one", " "}) {
+		t.Fatal("invalid catalog order must be rejected")
+	}
+	if !validOrder([]string{"one", "two"}) {
+		t.Fatal("unique catalog order must be accepted")
+	}
+}
