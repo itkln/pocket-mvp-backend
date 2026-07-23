@@ -17,6 +17,9 @@ func (api *API) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/password-reset/request", api.requestPasswordReset)
 	mux.HandleFunc("POST /api/v1/auth/password-reset/confirm", api.resetPassword)
 	mux.HandleFunc("POST /api/v1/auth/password/change", api.changePassword)
+	mux.HandleFunc("POST /api/v1/auth/email/change", api.changeEmail)
+	mux.HandleFunc("GET /api/v1/auth/me/avatar", api.avatar)
+	mux.HandleFunc("POST /api/v1/auth/me/avatar", api.updateAvatar)
 
 	mux.HandleFunc("/api/v1/owner/venues", api.ownerVenues)
 	mux.HandleFunc("/api/v1/owner/venues/{venueID}", api.ownerVenue)

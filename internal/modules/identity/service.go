@@ -180,14 +180,14 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 	}
 	var record encryptedUser
 	err := s.db.QueryRow(ctx, `
-		SELECT u.id::text, u.email, u.first_name, u.last_name, u.phone, u.account_role
+		SELECT u.id::text, u.email, u.first_name, u.last_name, u.phone, u.account_role, u.avatar_updated_at
 		FROM user_sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
 		  AND u.status = 'active' AND u.deleted_at IS NULL`, security.HashSessionToken(token),
 	).Scan(
 		&record.id, &record.email, &record.firstName, &record.lastName,
-		&record.phone, &record.role,
+		&record.phone, &record.role, &record.avatarUpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrUnauthorized
@@ -221,11 +221,11 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, input Update
 		UPDATE users
 		SET first_name = $1, last_name = $2, phone = $3, updated_at = now()
 		WHERE id = $4 AND status = 'active' AND deleted_at IS NULL
-		RETURNING id::text, email, first_name, last_name, phone, account_role`,
+		RETURNING id::text, email, first_name, last_name, phone, account_role, avatar_updated_at`,
 		encrypted.firstName, encrypted.lastName, encrypted.phone, userID,
 	).Scan(
 		&record.id, &record.email, &record.firstName, &record.lastName,
-		&record.phone, &record.role,
+		&record.phone, &record.role, &record.avatarUpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrUnauthorized

@@ -41,6 +41,25 @@ func TestDataProtectorAuthenticatesFieldContext(t *testing.T) {
 	}
 }
 
+func TestDataProtectorEncryptsBinaryProfileData(t *testing.T) {
+	protector, err := NewDataProtector(bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	photo := []byte{0x89, 0x50, 0x4e, 0x47, 0x00, 0xff}
+	encrypted, err := protector.EncryptBytes(photo, "users.avatar_data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encrypted, photo) {
+		t.Fatal("encrypted avatar must not expose source bytes")
+	}
+	decrypted, err := protector.DecryptBytes(encrypted, "users.avatar_data")
+	if err != nil || !bytes.Equal(decrypted, photo) {
+		t.Fatalf("unexpected binary round trip: %v", err)
+	}
+}
+
 func TestLookupIsNormalizedAndDeterministic(t *testing.T) {
 	protector, err := NewDataProtector(bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32))
 	if err != nil {

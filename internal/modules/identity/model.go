@@ -13,6 +13,7 @@ var (
 	ErrUnauthorized           = errors.New("unauthorized")
 	ErrInvalidResetToken      = errors.New("invalid or expired password reset token")
 	ErrInvalidCurrentPassword = errors.New("invalid current password")
+	ErrAvatarNotFound         = errors.New("avatar not found")
 )
 
 type RegisterInput struct {
@@ -50,20 +51,32 @@ type ChangePasswordInput struct {
 	NewPassword     string
 }
 
+type ChangeEmailInput struct {
+	UserID          string
+	CurrentPassword string
+	NewEmail        string
+}
+
 type UpdateProfileInput struct {
 	FirstName string
 	LastName  string
 	Phone     string
 }
 
+type Avatar struct {
+	Data        []byte
+	ContentType string
+}
+
 type User struct {
-	ID           string   `json:"id"`
-	Email        string   `json:"email"`
-	FirstName    string   `json:"first_name"`
-	LastName     string   `json:"last_name"`
-	Phone        string   `json:"phone,omitempty"`
-	Role         string   `json:"role"`
-	Capabilities []string `json:"capabilities"`
+	ID            string   `json:"id"`
+	Email         string   `json:"email"`
+	FirstName     string   `json:"first_name"`
+	LastName      string   `json:"last_name"`
+	Phone         string   `json:"phone,omitempty"`
+	Role          string   `json:"role"`
+	Capabilities  []string `json:"capabilities"`
+	AvatarVersion int64    `json:"-"`
 }
 
 type Session struct {

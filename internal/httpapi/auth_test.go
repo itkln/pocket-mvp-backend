@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,6 +28,11 @@ type fakeAuth struct {
 	changeErr     error
 	updateInput   identity.UpdateProfileInput
 	updateErr     error
+	emailInput    identity.ChangeEmailInput
+	emailErr      error
+	avatarType    string
+	avatarData    []byte
+	avatarErr     error
 }
 
 func (f *fakeAuth) Register(_ context.Context, input identity.RegisterInput) (identity.User, identity.Session, error) {
@@ -57,6 +64,18 @@ func (f *fakeAuth) ResetPassword(_ context.Context, input identity.PasswordReset
 func (f *fakeAuth) ChangePassword(_ context.Context, input identity.ChangePasswordInput) error {
 	f.changeInput = input
 	return f.changeErr
+}
+func (f *fakeAuth) ChangeEmail(_ context.Context, input identity.ChangeEmailInput) (identity.User, error) {
+	f.emailInput = input
+	return identity.User{ID: "user-1", Email: input.NewEmail, FirstName: "Denis", LastName: "Itkin", Role: "customer"}, f.emailErr
+}
+func (f *fakeAuth) UpdateAvatar(_ context.Context, _ string, contentType string, data []byte) (identity.User, error) {
+	f.avatarType = contentType
+	f.avatarData = data
+	return identity.User{ID: "user-1", Email: "user@example.com", Role: "customer", AvatarVersion: 1234}, f.avatarErr
+}
+func (f *fakeAuth) Avatar(_ context.Context, _ string) (identity.Avatar, error) {
+	return identity.Avatar{Data: f.avatarData, ContentType: f.avatarType}, f.avatarErr
 }
 
 func authHandler(service IdentityService, secure bool) http.Handler {
@@ -258,5 +277,60 @@ func TestChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
 
 	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "invalid_current_password") {
 		t.Fatalf("unexpected response %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestChangeEmailRequiresCurrentPassword(t *testing.T) {
+	service := &fakeAuth{}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/email/change", strings.NewReader(`{"current_password":"old secure password","new_email":"new@example.com"}`))
+	request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-token"})
+	response := httptest.NewRecorder()
+	authHandler(service, false).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("unexpected response: status=%d body=%s", response.Code, response.Body.String())
+	}
+	if service.emailInput.UserID != "user-1" || service.emailInput.CurrentPassword != "old secure password" || service.emailInput.NewEmail != "new@example.com" {
+		t.Fatalf("unexpected change email input: %#v", service.emailInput)
+	}
+	if !strings.Contains(response.Body.String(), `"email":"new@example.com"`) {
+		t.Fatalf("updated email was not returned: %s", response.Body.String())
+	}
+}
+
+func TestUpdateAndReadAvatar(t *testing.T) {
+	service := &fakeAuth{}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("avatar", "avatar.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	png := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00}
+	if _, err := part.Write(png); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/me/avatar", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-token"})
+	response := httptest.NewRecorder()
+	authHandler(service, false).ServeHTTP(response, request)
+	if response.Code != http.StatusOK || service.avatarType != "image/png" || !bytes.Equal(service.avatarData, png) {
+		t.Fatalf("avatar upload failed: status=%d type=%q body=%s", response.Code, service.avatarType, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `/api/v1/auth/me/avatar?v=1234`) {
+		t.Fatalf("avatar URL missing: %s", response.Body.String())
+	}
+
+	getRequest := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me/avatar", nil)
+	getRequest.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-token"})
+	getResponse := httptest.NewRecorder()
+	authHandler(service, false).ServeHTTP(getResponse, getRequest)
+	if getResponse.Code != http.StatusOK || getResponse.Header().Get("Content-Type") != "image/png" || !bytes.Equal(getResponse.Body.Bytes(), png) {
+		t.Fatalf("avatar read failed: status=%d type=%q", getResponse.Code, getResponse.Header().Get("Content-Type"))
 	}
 }

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 )
 
 const maxAuthBody = 64 << 10
+const maxAvatarBody = 2 << 20
 
 func (api *API) currentUser(w http.ResponseWriter, r *http.Request) (identity.User, bool) {
 	cookie, err := r.Cookie(api.sessionCookie)
@@ -55,6 +57,11 @@ type changePasswordRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
+type changeEmailRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewEmail        string `json:"new_email"`
+}
+
 type updateProfileRequest struct {
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
@@ -62,7 +69,12 @@ type updateProfileRequest struct {
 }
 
 type authResponse struct {
-	User identity.User `json:"user"`
+	User authUserResponse `json:"user"`
+}
+
+type authUserResponse struct {
+	identity.User
+	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
 type errorEnvelope struct {
@@ -94,7 +106,7 @@ func (api *API) register(w http.ResponseWriter, r *http.Request) {
 	}
 	api.setSessionCookie(w, session)
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusCreated, authResponse{User: user})
+	writeJSON(w, http.StatusCreated, newAuthResponse(user))
 }
 
 func (api *API) login(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +126,7 @@ func (api *API) login(w http.ResponseWriter, r *http.Request) {
 	}
 	api.setSessionCookie(w, session)
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, authResponse{User: user})
+	writeJSON(w, http.StatusOK, newAuthResponse(user))
 }
 
 func (api *API) me(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +141,7 @@ func (api *API) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, authResponse{User: user})
+	writeJSON(w, http.StatusOK, newAuthResponse(user))
 }
 
 func (api *API) updateProfile(w http.ResponseWriter, r *http.Request) {
@@ -151,7 +163,7 @@ func (api *API) updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, authResponse{User: updated})
+	writeJSON(w, http.StatusOK, newAuthResponse(updated))
 }
 
 func (api *API) logout(w http.ResponseWriter, r *http.Request) {
@@ -235,6 +247,94 @@ func (api *API) changePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (api *API) changeEmail(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	var request changeEmailRequest
+	if !decodeAuthJSON(w, r, &request) {
+		return
+	}
+	updated, err := api.identity.ChangeEmail(r.Context(), identity.ChangeEmailInput{
+		UserID: user.ID, CurrentPassword: request.CurrentPassword, NewEmail: request.NewEmail,
+	})
+	if err != nil {
+		api.writeAuthError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, newAuthResponse(updated))
+}
+
+func (api *API) updateAvatar(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxAvatarBody+(64<<10))
+	if err := r.ParseMultipartForm(maxAvatarBody); err != nil {
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "avatar_too_large", "Фотография должна быть меньше 2 МБ")
+		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+	file, _, err := r.FormFile("avatar")
+	if err != nil {
+		writeAPIError(w, http.StatusBadRequest, "invalid_avatar", "Выберите фотографию")
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxAvatarBody+1))
+	if err != nil || len(data) == 0 || len(data) > maxAvatarBody {
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "avatar_too_large", "Фотография должна быть меньше 2 МБ")
+		return
+	}
+	contentType := http.DetectContentType(data)
+	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
+		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_avatar", "Используйте JPEG, PNG или WebP")
+		return
+	}
+	updated, err := api.identity.UpdateAvatar(r.Context(), user.ID, contentType, data)
+	if err != nil {
+		api.writeAuthError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, newAuthResponse(updated))
+}
+
+func (api *API) avatar(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	avatar, err := api.identity.Avatar(r.Context(), user.ID)
+	if errors.Is(err, identity.ErrAvatarNotFound) {
+		writeAPIError(w, http.StatusNotFound, "avatar_not_found", "Фотография не найдена")
+		return
+	}
+	if err != nil {
+		api.writeAuthError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", avatar.ContentType)
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(avatar.Data)))
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(avatar.Data)
+}
+
+func newAuthResponse(user identity.User) authResponse {
+	response := authUserResponse{User: user}
+	if user.AvatarVersion > 0 {
+		response.AvatarURL = fmt.Sprintf("/api/v1/auth/me/avatar?v=%d", user.AvatarVersion)
+	}
+	return authResponse{User: response}
 }
 
 func (api *API) setSessionCookie(w http.ResponseWriter, session identity.Session) {

@@ -28,6 +28,9 @@ type IdentityService interface {
 	RequestPasswordReset(context.Context, identity.PasswordResetRequest) error
 	ResetPassword(context.Context, identity.PasswordResetConfirmation) error
 	ChangePassword(context.Context, identity.ChangePasswordInput) error
+	ChangeEmail(context.Context, identity.ChangeEmailInput) (identity.User, error)
+	UpdateAvatar(context.Context, string, string, []byte) (identity.User, error)
+	Avatar(context.Context, string) (identity.Avatar, error)
 }
 
 type VenueService interface {

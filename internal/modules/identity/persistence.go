@@ -19,12 +19,13 @@ type encryptedRegistration struct {
 }
 
 type encryptedUser struct {
-	id        string
-	email     string
-	firstName string
-	lastName  string
-	phone     *string
-	role      string
+	id              string
+	email           string
+	firstName       string
+	lastName        string
+	phone           *string
+	role            string
+	avatarUpdatedAt *time.Time
 }
 
 type credentialRecord struct {
@@ -104,19 +105,19 @@ func (s *Service) decryptUser(record encryptedUser) (User, error) {
 	}
 	return User{
 		ID: record.id, Email: email, FirstName: firstName, LastName: lastName,
-		Phone: phone, Role: record.role,
+		Phone: phone, Role: record.role, AvatarVersion: avatarVersion(record.avatarUpdatedAt),
 	}, nil
 }
 
 func (s *Service) findUserByLookup(ctx context.Context, lookup []byte) (credentialRecord, bool, error) {
 	var record credentialRecord
 	err := s.db.QueryRow(ctx, `
-		SELECT id::text, email, first_name, last_name, phone, password_hash, account_role
+		SELECT id::text, email, first_name, last_name, phone, password_hash, account_role, avatar_updated_at
 		FROM users
 		WHERE email_lookup = $1 AND deleted_at IS NULL AND status = 'active'`, lookup,
 	).Scan(
 		&record.user.id, &record.user.email, &record.user.firstName, &record.user.lastName,
-		&record.user.phone, &record.passwordHash, &record.user.role,
+		&record.user.phone, &record.passwordHash, &record.user.role, &record.user.avatarUpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return credentialRecord{}, false, nil
@@ -125,6 +126,13 @@ func (s *Service) findUserByLookup(ctx context.Context, lookup []byte) (credenti
 		return credentialRecord{}, false, fmt.Errorf("find user: %w", err)
 	}
 	return record, true, nil
+}
+
+func avatarVersion(updatedAt *time.Time) int64 {
+	if updatedAt == nil {
+		return 0
+	}
+	return updatedAt.UnixMilli()
 }
 
 func (s *Service) loginBlocked(ctx context.Context, lookup []byte, ip string) (bool, error) {

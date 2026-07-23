@@ -44,26 +44,44 @@ func DecodeKey(value string) ([]byte, error) {
 }
 
 func (p *DataProtector) Encrypt(value, field string) (string, error) {
+	sealed, err := p.EncryptBytes([]byte(value), field)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(sealed), nil
+}
+
+func (p *DataProtector) EncryptBytes(value []byte, field string) ([]byte, error) {
 	nonce := make([]byte, p.aead.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		return "", fmt.Errorf("generate encryption nonce: %w", err)
+		return nil, fmt.Errorf("generate encryption nonce: %w", err)
 	}
-	ciphertext := p.aead.Seal(nil, nonce, []byte(value), []byte(field))
-	sealed := append(nonce, ciphertext...)
-	return base64.RawURLEncoding.EncodeToString(sealed), nil
+	ciphertext := p.aead.Seal(nil, nonce, value, []byte(field))
+	return append(nonce, ciphertext...), nil
 }
 
 func (p *DataProtector) Decrypt(value, field string) (string, error) {
 	sealed, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(sealed) < p.aead.NonceSize()+p.aead.Overhead() {
+	if err != nil {
 		return "", errors.New("invalid encrypted value")
+	}
+	plaintext, err := p.DecryptBytes(sealed, field)
+	if err != nil {
+		return "", err
+	}
+	return string(plaintext), nil
+}
+
+func (p *DataProtector) DecryptBytes(sealed []byte, field string) ([]byte, error) {
+	if len(sealed) < p.aead.NonceSize()+p.aead.Overhead() {
+		return nil, errors.New("invalid encrypted value")
 	}
 	nonce := sealed[:p.aead.NonceSize()]
 	plaintext, err := p.aead.Open(nil, nonce, sealed[p.aead.NonceSize():], []byte(field))
 	if err != nil {
-		return "", errors.New("decrypt value: authentication failed")
+		return nil, errors.New("decrypt value: authentication failed")
 	}
-	return string(plaintext), nil
+	return plaintext, nil
 }
 
 func (p *DataProtector) Lookup(normalizedValue string) []byte {
