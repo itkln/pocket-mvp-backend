@@ -23,6 +23,7 @@ type IdentityService interface {
 	Register(context.Context, identity.RegisterInput) (identity.User, identity.Session, error)
 	Login(context.Context, identity.LoginInput) (identity.User, identity.Session, error)
 	Authenticate(context.Context, string) (identity.User, error)
+	UpdateProfile(context.Context, string, identity.UpdateProfileInput) (identity.User, error)
 	Logout(context.Context, string) error
 	RequestPasswordReset(context.Context, identity.PasswordResetRequest) error
 	ResetPassword(context.Context, identity.PasswordResetConfirmation) error

@@ -203,6 +203,45 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 	return user, err
 }
 
+func (s *Service) UpdateProfile(ctx context.Context, userID string, input UpdateProfileInput) (User, error) {
+	input.FirstName = strings.TrimSpace(input.FirstName)
+	input.LastName = strings.TrimSpace(input.LastName)
+	input.Phone = strings.TrimSpace(input.Phone)
+	if userID == "" || !validProfileUpdate(input) {
+		return User{}, ErrInvalidInput
+	}
+
+	encrypted, err := s.encryptProfile(input)
+	if err != nil {
+		return User{}, fmt.Errorf("encrypt profile: %w", err)
+	}
+
+	var record encryptedUser
+	err = s.db.QueryRow(ctx, `
+		UPDATE users
+		SET first_name = $1, last_name = $2, phone = $3, updated_at = now()
+		WHERE id = $4 AND status = 'active' AND deleted_at IS NULL
+		RETURNING id::text, email, first_name, last_name, phone, account_role`,
+		encrypted.firstName, encrypted.lastName, encrypted.phone, userID,
+	).Scan(
+		&record.id, &record.email, &record.firstName, &record.lastName,
+		&record.phone, &record.role,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrUnauthorized
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("update profile: %w", err)
+	}
+
+	user, err := s.decryptUser(record)
+	if err != nil {
+		return User{}, err
+	}
+	user.Capabilities, err = s.capabilities.ListCapabilities(ctx, user.ID)
+	return user, err
+}
+
 func (s *Service) Logout(ctx context.Context, token string) error {
 	if token == "" {
 		return nil
@@ -217,4 +256,8 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 func validRegistration(input RegisterInput) bool {
 	return validName(input.FirstName) && validName(input.LastName) && validEmail(input.Email) &&
 		validPassword(input.Password) && utf8.RuneCountInString(input.Phone) <= 40
+}
+
+func validProfileUpdate(input UpdateProfileInput) bool {
+	return validName(input.FirstName) && validName(input.LastName) && utf8.RuneCountInString(input.Phone) <= 40
 }

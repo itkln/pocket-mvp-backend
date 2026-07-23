@@ -50,6 +50,12 @@ type ChangePasswordInput struct {
 	NewPassword     string
 }
 
+type UpdateProfileInput struct {
+	FirstName string
+	LastName  string
+	Phone     string
+}
+
 type User struct {
 	ID           string   `json:"id"`
 	Email        string   `json:"email"`

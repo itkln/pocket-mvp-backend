@@ -24,6 +24,8 @@ type fakeAuth struct {
 	resetErr      error
 	changeInput   identity.ChangePasswordInput
 	changeErr     error
+	updateInput   identity.UpdateProfileInput
+	updateErr     error
 }
 
 func (f *fakeAuth) Register(_ context.Context, input identity.RegisterInput) (identity.User, identity.Session, error) {
@@ -35,6 +37,10 @@ func (f *fakeAuth) Login(_ context.Context, input identity.LoginInput) (identity
 }
 func (f *fakeAuth) Authenticate(_ context.Context, _ string) (identity.User, error) {
 	return identity.User{ID: "user-1", Email: "user@example.com", Role: "customer"}, f.authErr
+}
+func (f *fakeAuth) UpdateProfile(_ context.Context, _ string, input identity.UpdateProfileInput) (identity.User, error) {
+	f.updateInput = input
+	return identity.User{ID: "user-1", Email: "user@example.com", FirstName: input.FirstName, LastName: input.LastName, Phone: input.Phone, Role: "customer"}, f.updateErr
 }
 func (f *fakeAuth) Logout(_ context.Context, token string) error {
 	f.logoutToken = token
@@ -136,6 +142,35 @@ func TestMeRequiresValidSession(t *testing.T) {
 	authHandler(service, false).ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", response.Code)
+	}
+}
+
+func TestUpdateProfileUsesAuthenticatedUser(t *testing.T) {
+	service := &fakeAuth{}
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/me", strings.NewReader(`{"first_name":"Denis","last_name":"Itkin","phone":"+421 900 123 456"}`))
+	request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-token"})
+	response := httptest.NewRecorder()
+	authHandler(service, false).ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("unexpected response: status=%d body=%s", response.Code, response.Body.String())
+	}
+	if service.updateInput.FirstName != "Denis" || service.updateInput.LastName != "Itkin" || service.updateInput.Phone != "+421 900 123 456" {
+		t.Fatalf("unexpected profile input: %#v", service.updateInput)
+	}
+	if !strings.Contains(response.Body.String(), `"phone":"+421 900 123 456"`) {
+		t.Fatalf("updated profile was not returned: %s", response.Body.String())
+	}
+}
+
+func TestUpdateProfileRejectsUnknownFields(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/me", strings.NewReader(`{"first_name":"Denis","last_name":"Itkin","email":"other@example.com"}`))
+	request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-token"})
+	response := httptest.NewRecorder()
+	authHandler(&fakeAuth{}, false).ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("expected email field to be rejected, got %d", response.Code)
 	}
 }
 

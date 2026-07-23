@@ -55,6 +55,12 @@ type changePasswordRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
+type updateProfileRequest struct {
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Phone     string `json:"phone"`
+}
+
 type authResponse struct {
 	User identity.User `json:"user"`
 }
@@ -124,6 +130,28 @@ func (api *API) me(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, authResponse{User: user})
+}
+
+func (api *API) updateProfile(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	var request updateProfileRequest
+	if !decodeAuthJSON(w, r, &request) {
+		return
+	}
+	updated, err := api.identity.UpdateProfile(r.Context(), user.ID, identity.UpdateProfileInput{
+		FirstName: request.FirstName,
+		LastName:  request.LastName,
+		Phone:     request.Phone,
+	})
+	if err != nil {
+		api.writeAuthError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, authResponse{User: updated})
 }
 
 func (api *API) logout(w http.ResponseWriter, r *http.Request) {

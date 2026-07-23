@@ -32,6 +32,12 @@ type credentialRecord struct {
 	passwordHash string
 }
 
+type encryptedProfile struct {
+	firstName string
+	lastName  string
+	phone     *string
+}
+
 func (s *Service) encryptRegistration(input RegisterInput) (encryptedRegistration, error) {
 	email, err := s.protector.Encrypt(input.Email, "users.email")
 	if err != nil {
@@ -54,6 +60,26 @@ func (s *Service) encryptRegistration(input RegisterInput) (encryptedRegistratio
 		phone = &value
 	}
 	return encryptedRegistration{email: email, firstName: firstName, lastName: lastName, phone: phone}, nil
+}
+
+func (s *Service) encryptProfile(input UpdateProfileInput) (encryptedProfile, error) {
+	firstName, err := s.protector.Encrypt(input.FirstName, "users.first_name")
+	if err != nil {
+		return encryptedProfile{}, err
+	}
+	lastName, err := s.protector.Encrypt(input.LastName, "users.last_name")
+	if err != nil {
+		return encryptedProfile{}, err
+	}
+	var phone *string
+	if input.Phone != "" {
+		value, encryptErr := s.protector.Encrypt(input.Phone, "users.phone")
+		if encryptErr != nil {
+			return encryptedProfile{}, encryptErr
+		}
+		phone = &value
+	}
+	return encryptedProfile{firstName: firstName, lastName: lastName, phone: phone}, nil
 }
 
 func (s *Service) decryptUser(record encryptedUser) (User, error) {
