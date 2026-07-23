@@ -2,7 +2,7 @@ package httpapi
 
 import "net/http"
 
-func (api *API) ownerOrders(w http.ResponseWriter, r *http.Request) {
+func (api *API) listOwnerOrders(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
 		return
@@ -15,7 +15,7 @@ func (api *API) ownerOrders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"orders": items})
 }
 
-func (api *API) ownerOrder(w http.ResponseWriter, r *http.Request) {
+func (api *API) updateOwnerOrderStatus(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
 		return

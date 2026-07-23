@@ -2,7 +2,7 @@ package httpapi
 
 import "net/http"
 
-func (api *API) ownerReviews(w http.ResponseWriter, r *http.Request) {
+func (api *API) listOwnerReviews(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
 		return
@@ -15,7 +15,7 @@ func (api *API) ownerReviews(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"reviews": items})
 }
 
-func (api *API) ownerReview(w http.ResponseWriter, r *http.Request) {
+func (api *API) replyToOwnerReview(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
 		return

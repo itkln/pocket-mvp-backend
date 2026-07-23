@@ -6,66 +6,78 @@ import (
 	"pocket-mvp-backend/internal/modules/catalog"
 )
 
-func (api *API) ownerCategories(w http.ResponseWriter, r *http.Request) {
+func (api *API) listOwnerCategories(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
 		return
 	}
 	venueID := pathParam(r, "venueID")
-	switch r.Method {
-	case http.MethodGet:
-		items, err := api.catalog.ListCategories(r.Context(), user.ID, venueID)
-		if err != nil {
-			api.writeOwnerError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"categories": items})
-	case http.MethodPost:
-		var input catalog.CategoryInput
-		if !decodeOwnerJSON(w, r, &input) {
-			return
-		}
-		item, err := api.catalog.CreateCategory(r.Context(), user.ID, venueID, input)
-		if err != nil {
-			api.writeOwnerError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, map[string]any{"category": item})
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+	items, err := api.catalog.ListCategories(r.Context(), user.ID, venueID)
+	if err != nil {
+		api.writeOwnerError(w, err)
+		return
 	}
+	writeJSON(w, http.StatusOK, map[string]any{"categories": items})
 }
 
-func (api *API) ownerCategory(w http.ResponseWriter, r *http.Request) {
+func (api *API) createOwnerCategory(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
 		return
 	}
-	venueID, categoryID := pathParam(r, "venueID"), pathParam(r, "resourceID")
-	switch r.Method {
-	case http.MethodPatch:
-		var input catalog.CategoryInput
-		if !decodeOwnerJSON(w, r, &input) {
-			return
-		}
-		item, err := api.catalog.UpdateCategory(r.Context(), user.ID, venueID, categoryID, input)
-		if err != nil {
-			api.writeOwnerError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"category": item})
-	case http.MethodDelete:
-		if err := api.catalog.DeleteCategory(r.Context(), user.ID, venueID, categoryID); err != nil {
-			api.writeOwnerError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+	var input catalog.CategoryInput
+	if !decodeOwnerJSON(w, r, &input) {
+		return
 	}
+	item, err := api.catalog.CreateCategory(r.Context(), user.ID, pathParam(r, "venueID"), input)
+	if err != nil {
+		api.writeOwnerError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"category": item})
 }
 
-func (api *API) ownerCategoryOrder(w http.ResponseWriter, r *http.Request) {
+func (api *API) updateOwnerCategory(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	var input catalog.CategoryInput
+	if !decodeOwnerJSON(w, r, &input) {
+		return
+	}
+	item, err := api.catalog.UpdateCategory(
+		r.Context(),
+		user.ID,
+		pathParam(r, "venueID"),
+		pathParam(r, "resourceID"),
+		input,
+	)
+	if err != nil {
+		api.writeOwnerError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"category": item})
+}
+
+func (api *API) deleteOwnerCategory(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	if err := api.catalog.DeleteCategory(
+		r.Context(),
+		user.ID,
+		pathParam(r, "venueID"),
+		pathParam(r, "resourceID"),
+	); err != nil {
+		api.writeOwnerError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (api *API) reorderOwnerCategories(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
 		return
@@ -81,66 +93,78 @@ func (api *API) ownerCategoryOrder(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (api *API) ownerMenuItems(w http.ResponseWriter, r *http.Request) {
+func (api *API) listOwnerMenuItems(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
 		return
 	}
 	venueID := pathParam(r, "venueID")
-	switch r.Method {
-	case http.MethodGet:
-		items, err := api.catalog.ListMenuItems(r.Context(), user.ID, venueID)
-		if err != nil {
-			api.writeOwnerError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"items": items})
-	case http.MethodPost:
-		var input catalog.MenuItemInput
-		if !decodeOwnerJSON(w, r, &input) {
-			return
-		}
-		item, err := api.catalog.CreateMenuItem(r.Context(), user.ID, venueID, input)
-		if err != nil {
-			api.writeOwnerError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusCreated, map[string]any{"item": item})
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+	items, err := api.catalog.ListMenuItems(r.Context(), user.ID, venueID)
+	if err != nil {
+		api.writeOwnerError(w, err)
+		return
 	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
-func (api *API) ownerMenuItem(w http.ResponseWriter, r *http.Request) {
+func (api *API) createOwnerMenuItem(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
 		return
 	}
-	venueID, itemID := pathParam(r, "venueID"), pathParam(r, "resourceID")
-	switch r.Method {
-	case http.MethodPatch:
-		var input catalog.MenuItemInput
-		if !decodeOwnerJSON(w, r, &input) {
-			return
-		}
-		item, err := api.catalog.UpdateMenuItem(r.Context(), user.ID, venueID, itemID, input)
-		if err != nil {
-			api.writeOwnerError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"item": item})
-	case http.MethodDelete:
-		if err := api.catalog.DeleteMenuItem(r.Context(), user.ID, venueID, itemID); err != nil {
-			api.writeOwnerError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+	var input catalog.MenuItemInput
+	if !decodeOwnerJSON(w, r, &input) {
+		return
 	}
+	item, err := api.catalog.CreateMenuItem(r.Context(), user.ID, pathParam(r, "venueID"), input)
+	if err != nil {
+		api.writeOwnerError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"item": item})
 }
 
-func (api *API) ownerMenuItemOrder(w http.ResponseWriter, r *http.Request) {
+func (api *API) updateOwnerMenuItem(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	var input catalog.MenuItemInput
+	if !decodeOwnerJSON(w, r, &input) {
+		return
+	}
+	item, err := api.catalog.UpdateMenuItem(
+		r.Context(),
+		user.ID,
+		pathParam(r, "venueID"),
+		pathParam(r, "resourceID"),
+		input,
+	)
+	if err != nil {
+		api.writeOwnerError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"item": item})
+}
+
+func (api *API) deleteOwnerMenuItem(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	if err := api.catalog.DeleteMenuItem(
+		r.Context(),
+		user.ID,
+		pathParam(r, "venueID"),
+		pathParam(r, "resourceID"),
+	); err != nil {
+		api.writeOwnerError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (api *API) reorderOwnerMenuItems(w http.ResponseWriter, r *http.Request) {
 	user, ok := api.currentUser(w, r)
 	if !ok {
 		return

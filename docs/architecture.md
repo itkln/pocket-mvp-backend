@@ -47,6 +47,9 @@ Owns the public HTTP boundary:
 - cookies, status codes, and stable error envelopes;
 - small service interfaces used by handlers.
 
+Each HTTP method is registered with its own action-oriented handler. Handlers
+must not dispatch requests with `switch r.Method`; `chi` owns method routing.
+
 The `/api/v1` routes and JSON contracts remain unchanged when internal modules
 are reorganized.
 
