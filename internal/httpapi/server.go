@@ -29,7 +29,7 @@ func New(deps Dependencies) http.Handler {
 		sessionSecure:  deps.SessionSecure,
 	}
 
-	return api.recoverPanic(api.requestLogger(api.securityHeaders(api.cors(api.routes()))))
+	return api.routes()
 }
 
 func (api *API) health(w http.ResponseWriter, _ *http.Request) {

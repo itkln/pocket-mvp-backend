@@ -11,7 +11,7 @@ func (api *API) ownerCategories(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	venueID := r.PathValue("venueID")
+	venueID := pathParam(r, "venueID")
 	switch r.Method {
 	case http.MethodGet:
 		items, err := api.catalog.ListCategories(r.Context(), user.ID, venueID)
@@ -41,7 +41,7 @@ func (api *API) ownerCategory(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	venueID, categoryID := r.PathValue("venueID"), r.PathValue("resourceID")
+	venueID, categoryID := pathParam(r, "venueID"), pathParam(r, "resourceID")
 	switch r.Method {
 	case http.MethodPatch:
 		var input catalog.CategoryInput
@@ -74,7 +74,7 @@ func (api *API) ownerCategoryOrder(w http.ResponseWriter, r *http.Request) {
 	if !decodeOwnerJSON(w, r, &input) {
 		return
 	}
-	if err := api.catalog.ReorderCategories(r.Context(), user.ID, r.PathValue("venueID"), input.IDs); err != nil {
+	if err := api.catalog.ReorderCategories(r.Context(), user.ID, pathParam(r, "venueID"), input.IDs); err != nil {
 		api.writeOwnerError(w, err)
 		return
 	}
@@ -86,7 +86,7 @@ func (api *API) ownerMenuItems(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	venueID := r.PathValue("venueID")
+	venueID := pathParam(r, "venueID")
 	switch r.Method {
 	case http.MethodGet:
 		items, err := api.catalog.ListMenuItems(r.Context(), user.ID, venueID)
@@ -116,7 +116,7 @@ func (api *API) ownerMenuItem(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	venueID, itemID := r.PathValue("venueID"), r.PathValue("resourceID")
+	venueID, itemID := pathParam(r, "venueID"), pathParam(r, "resourceID")
 	switch r.Method {
 	case http.MethodPatch:
 		var input catalog.MenuItemInput
@@ -149,7 +149,7 @@ func (api *API) ownerMenuItemOrder(w http.ResponseWriter, r *http.Request) {
 	if !decodeOwnerJSON(w, r, &input) {
 		return
 	}
-	if err := api.catalog.ReorderMenuItems(r.Context(), user.ID, r.PathValue("venueID"), input.CategoryID, input.IDs); err != nil {
+	if err := api.catalog.ReorderMenuItems(r.Context(), user.ID, pathParam(r, "venueID"), input.CategoryID, input.IDs); err != nil {
 		api.writeOwnerError(w, err)
 		return
 	}

@@ -11,7 +11,7 @@ func (api *API) ownerPayments(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	items, err := api.billing.ListPayments(r.Context(), user.ID, r.PathValue("venueID"))
+	items, err := api.billing.ListPayments(r.Context(), user.ID, pathParam(r, "venueID"))
 	if err != nil {
 		api.writeOwnerError(w, err)
 		return

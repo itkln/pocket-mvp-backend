@@ -1,20 +1,16 @@
 package catalog
 
-import (
-	"context"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-)
+import "context"
 
 type VenueAuthorizer interface {
 	RequireOwner(context.Context, string, string) error
 }
 
 type Service struct {
-	db         *pgxpool.Pool
+	repository Repository
 	authorizer VenueAuthorizer
 }
 
-func NewService(db *pgxpool.Pool, authorizer VenueAuthorizer) *Service {
-	return &Service{db: db, authorizer: authorizer}
+func NewService(repository Repository, authorizer VenueAuthorizer) *Service {
+	return &Service{repository: repository, authorizer: authorizer}
 }

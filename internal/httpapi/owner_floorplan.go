@@ -10,7 +10,7 @@ func (api *API) ownerFloorPlan(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	venueID := r.PathValue("venueID")
+	venueID := pathParam(r, "venueID")
 	switch r.Method {
 	case http.MethodGet:
 		plan, err := api.floorPlan.Get(r.Context(), user.ID, venueID)

@@ -11,7 +11,7 @@ func (api *API) ownerStaff(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	venueID := r.PathValue("venueID")
+	venueID := pathParam(r, "venueID")
 	switch r.Method {
 	case http.MethodGet:
 		items, err := api.workforce.List(r.Context(), user.ID, venueID)
@@ -41,7 +41,7 @@ func (api *API) ownerStaffMember(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	venueID, staffID := r.PathValue("venueID"), r.PathValue("resourceID")
+	venueID, staffID := pathParam(r, "venueID"), pathParam(r, "resourceID")
 	switch r.Method {
 	case http.MethodPatch:
 		var input workforce.StaffInput

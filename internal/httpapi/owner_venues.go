@@ -40,7 +40,7 @@ func (api *API) ownerVenue(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	venueID := r.PathValue("venueID")
+	venueID := pathParam(r, "venueID")
 	switch r.Method {
 	case http.MethodPatch:
 		var input venues.Input
@@ -69,7 +69,7 @@ func (api *API) ownerDashboard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	result, err := api.reporting.Dashboard(r.Context(), user.ID, r.PathValue("venueID"))
+	result, err := api.reporting.Dashboard(r.Context(), user.ID, pathParam(r, "venueID"))
 	if err != nil {
 		api.writeOwnerError(w, err)
 		return

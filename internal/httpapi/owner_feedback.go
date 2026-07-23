@@ -7,7 +7,7 @@ func (api *API) ownerReviews(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	items, err := api.feedback.List(r.Context(), user.ID, r.PathValue("venueID"))
+	items, err := api.feedback.List(r.Context(), user.ID, pathParam(r, "venueID"))
 	if err != nil {
 		api.writeOwnerError(w, err)
 		return
@@ -27,7 +27,7 @@ func (api *API) ownerReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item, err := api.feedback.Reply(
-		r.Context(), user.ID, r.PathValue("venueID"), r.PathValue("resourceID"), input.OwnerReply,
+		r.Context(), user.ID, pathParam(r, "venueID"), pathParam(r, "resourceID"), input.OwnerReply,
 	)
 	if err != nil {
 		api.writeOwnerError(w, err)

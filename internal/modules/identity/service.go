@@ -8,10 +8,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"pocket-mvp-backend/internal/security"
 )
 
@@ -30,7 +26,7 @@ type PasswordResetOptions struct {
 }
 
 type Service struct {
-	db           *pgxpool.Pool
+	repository   Repository
 	protector    *security.DataProtector
 	capabilities CapabilityReader
 	ttl          time.Duration
@@ -40,16 +36,17 @@ type Service struct {
 	resetTTL     time.Duration
 }
 
-func NewService(db *pgxpool.Pool, protector *security.DataProtector, capabilities CapabilityReader, ttl time.Duration, reset PasswordResetOptions) (*Service, error) {
+func NewService(repository Repository, protector *security.DataProtector, capabilities CapabilityReader, ttl time.Duration, reset PasswordResetOptions) (*Service, error) {
 	dummyHash, err := security.HashPassword("dummy-password-never-used")
 	if err != nil {
 		return nil, err
 	}
-	if reset.Sender == nil || strings.TrimSpace(reset.BaseURL) == "" || reset.TTL <= 0 {
-		return nil, errors.New("password reset configuration is incomplete")
+	if repository == nil || protector == nil || capabilities == nil ||
+		reset.Sender == nil || strings.TrimSpace(reset.BaseURL) == "" || ttl <= 0 || reset.TTL <= 0 {
+		return nil, errors.New("identity service configuration is incomplete")
 	}
 	return &Service{
-		db:           db,
+		repository:   repository,
 		protector:    protector,
 		capabilities: capabilities,
 		ttl:          ttl,
@@ -77,35 +74,20 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (User, Sess
 	if err != nil {
 		return User{}, Session{}, err
 	}
-
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return User{}, Session{}, fmt.Errorf("begin registration: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	var userID string
-	err = tx.QueryRow(ctx, `
-		INSERT INTO users (email, email_lookup, password_hash, first_name, last_name, phone, account_role)
-		VALUES ($1, $2, $3, $4, $5, $6, 'customer')
-		RETURNING id::text`,
-		encrypted.email, s.protector.Lookup(input.Email), passwordHash,
-		encrypted.firstName, encrypted.lastName, encrypted.phone,
-	).Scan(&userID)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			return User{}, Session{}, ErrEmailAlreadyExists
-		}
-		return User{}, Session{}, fmt.Errorf("insert user: %w", err)
-	}
-
-	session, err := s.createSession(ctx, tx, userID, input.UserAgent, input.IPAddress)
+	session, stored, err := s.newSession("", input.UserAgent, input.IPAddress)
 	if err != nil {
 		return User{}, Session{}, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return User{}, Session{}, fmt.Errorf("commit registration: %w", err)
+	userID, err := s.repository.Register(ctx, newUserRecord{
+		email:        encrypted.email,
+		emailLookup:  s.protector.Lookup(input.Email),
+		passwordHash: passwordHash,
+		firstName:    encrypted.firstName,
+		lastName:     encrypted.lastName,
+		phone:        encrypted.phone,
+	}, stored)
+	if err != nil {
+		return User{}, Session{}, err
 	}
 	return User{
 		ID: userID, Email: input.Email, FirstName: input.FirstName, LastName: input.LastName,
@@ -121,7 +103,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (User, Session, e
 	lookup := s.protector.Lookup(email)
 	ip := normalizedIP(input.IPAddress)
 
-	blocked, err := s.loginBlocked(ctx, lookup, ip)
+	blocked, err := s.repository.LoginBlocked(ctx, lookup, ip)
 	if err != nil {
 		return User{}, Session{}, err
 	}
@@ -129,7 +111,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (User, Session, e
 		return User{}, Session{}, ErrTooManyAttempts
 	}
 
-	record, found, err := s.findUserByLookup(ctx, lookup)
+	record, found, err := s.repository.FindCredentials(ctx, lookup)
 	if err != nil {
 		return User{}, Session{}, err
 	}
@@ -142,7 +124,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (User, Session, e
 		verified = false
 	}
 	if !found || !verified {
-		if err := s.recordFailure(ctx, lookup, ip); err != nil {
+		if err := s.repository.RecordLoginFailure(ctx, lookup, ip); err != nil {
 			return User{}, Session{}, err
 		}
 		return User{}, Session{}, ErrInvalidCredentials
@@ -152,19 +134,11 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (User, Session, e
 	if err != nil {
 		return User{}, Session{}, err
 	}
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	session, stored, err := s.newSession(user.ID, input.UserAgent, ip)
 	if err != nil {
 		return User{}, Session{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := tx.Exec(ctx, `DELETE FROM auth_login_attempts WHERE email_lookup = $1 AND ip_address = $2`, lookup, ip); err != nil {
-		return User{}, Session{}, fmt.Errorf("clear login attempts: %w", err)
-	}
-	session, err := s.createSession(ctx, tx, user.ID, input.UserAgent, ip)
-	if err != nil {
-		return User{}, Session{}, err
-	}
-	if err := tx.Commit(ctx); err != nil {
+	if err := s.repository.CompleteLogin(ctx, lookup, ip, stored); err != nil {
 		return User{}, Session{}, err
 	}
 	user.Capabilities, err = s.capabilities.ListCapabilities(ctx, user.ID)
@@ -178,22 +152,9 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 	if token == "" {
 		return User{}, ErrUnauthorized
 	}
-	var record encryptedUser
-	err := s.db.QueryRow(ctx, `
-		SELECT u.id::text, u.email, u.first_name, u.last_name, u.phone, u.account_role, u.avatar_updated_at
-		FROM user_sessions s
-		JOIN users u ON u.id = s.user_id
-		WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
-		  AND u.status = 'active' AND u.deleted_at IS NULL`, security.HashSessionToken(token),
-	).Scan(
-		&record.id, &record.email, &record.firstName, &record.lastName,
-		&record.phone, &record.role, &record.avatarUpdatedAt,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return User{}, ErrUnauthorized
-	}
+	record, err := s.repository.FindUserBySession(ctx, security.HashSessionToken(token))
 	if err != nil {
-		return User{}, fmt.Errorf("authenticate session: %w", err)
+		return User{}, err
 	}
 	user, err := s.decryptUser(record)
 	if err != nil {
@@ -216,22 +177,9 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, input Update
 		return User{}, fmt.Errorf("encrypt profile: %w", err)
 	}
 
-	var record encryptedUser
-	err = s.db.QueryRow(ctx, `
-		UPDATE users
-		SET first_name = $1, last_name = $2, phone = $3, updated_at = now()
-		WHERE id = $4 AND status = 'active' AND deleted_at IS NULL
-		RETURNING id::text, email, first_name, last_name, phone, account_role, avatar_updated_at`,
-		encrypted.firstName, encrypted.lastName, encrypted.phone, userID,
-	).Scan(
-		&record.id, &record.email, &record.firstName, &record.lastName,
-		&record.phone, &record.role, &record.avatarUpdatedAt,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return User{}, ErrUnauthorized
-	}
+	record, err := s.repository.UpdateProfile(ctx, userID, encrypted)
 	if err != nil {
-		return User{}, fmt.Errorf("update profile: %w", err)
+		return User{}, err
 	}
 
 	user, err := s.decryptUser(record)
@@ -246,11 +194,7 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	if token == "" {
 		return nil
 	}
-	_, err := s.db.Exec(ctx, `
-		UPDATE user_sessions
-		SET revoked_at = now()
-		WHERE refresh_token_hash = $1 AND revoked_at IS NULL`, security.HashSessionToken(token))
-	return err
+	return s.repository.RevokeSession(ctx, security.HashSessionToken(token))
 }
 
 func validRegistration(input RegisterInput) bool {

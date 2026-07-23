@@ -7,6 +7,7 @@ payments, and operations.
 
 - Go 1.23 API with JSON logs, CORS, security headers, graceful shutdown, and
   PostgreSQL connection pooling.
+- `chi` routing with routes grouped by business domain.
 - PostgreSQL 17 with persistent local storage.
 - Versioned SQL migrations executed before the API starts.
 - Production Next.js frontend image from the sibling `frontend` repository.
@@ -18,8 +19,9 @@ payments, and operations.
 
 The API is a modular monolith split into bounded contexts under
 `internal/modules`: identity, venues, catalog, workforce, ordering, feedback,
-billing, floor plan, and reporting. HTTP handlers depend on narrow interfaces,
-and an architecture test prevents domain modules from importing one another.
+billing, floor plan, and reporting. Each domain separates use-case services,
+repository ports, and PostgreSQL adapters. HTTP handlers depend on narrow
+interfaces, and architecture tests enforce domain and persistence boundaries.
 
 See [docs/architecture.md](docs/architecture.md) for dependency rules, data
 ownership, and the path for extracting a module into a microservice.

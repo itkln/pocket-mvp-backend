@@ -7,7 +7,7 @@ func (api *API) ownerOrders(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	items, err := api.ordering.List(r.Context(), user.ID, r.PathValue("venueID"))
+	items, err := api.ordering.List(r.Context(), user.ID, pathParam(r, "venueID"))
 	if err != nil {
 		api.writeOwnerError(w, err)
 		return
@@ -27,7 +27,7 @@ func (api *API) ownerOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item, err := api.ordering.UpdateStatus(
-		r.Context(), user.ID, r.PathValue("venueID"), r.PathValue("resourceID"), input.Status,
+		r.Context(), user.ID, pathParam(r, "venueID"), pathParam(r, "resourceID"), input.Status,
 	)
 	if err != nil {
 		api.writeOwnerError(w, err)
