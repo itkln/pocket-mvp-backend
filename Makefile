@@ -1,4 +1,4 @@
-.PHONY: build up down logs ps migrate-up migrate-down migrate-version test
+.PHONY: build up down logs ps migrate-up migrate-down migrate-version seed-demo test
 
 build:
 	docker compose build
@@ -23,6 +23,10 @@ migrate-down:
 
 migrate-version:
 	docker compose run --rm migrate 'migrate -path=/migrations -database="$$DATABASE_URL" version'
+
+seed-demo:
+	docker compose build backend
+	docker compose --profile tools run --rm seed
 
 test:
 	docker run --rm -v "$(CURDIR):/src" -w /src golang:1.23-alpine \

@@ -54,6 +54,28 @@ Remove containers and the local database volume:
 docker compose down --volumes
 ```
 
+## Demo workspace
+
+Populate a local database with a repeatable owner workspace:
+
+```bash
+make seed-demo
+```
+
+Then open http://localhost:3000 and sign in with:
+
+- E-mail: `demo@pocket.local`
+- Password: `PocketDemo123!`
+
+The seed includes two venues, categories and menu items with images, staff,
+multi-floor layouts, orders in different states, payments, reviews, analytics,
+and an active Business trial. Running the command again replaces only this demo
+workspace, so it does not create duplicates. Override `DEMO_EMAIL` and
+`DEMO_PASSWORD` in `.env` when needed.
+
+The command is blocked outside `APP_ENV=development`. A non-development run
+requires the explicit `ALLOW_DEMO_SEED=true` override.
+
 ## Migrations
 
 Migration files live in `migrations/` and follow the `golang-migrate` naming

@@ -34,6 +34,7 @@ services:
     restart: "no"
 
   backend:
+    image: ${BACKEND_IMAGE:-pocket-mvp-backend}
     build:
       context: .
       args:
@@ -73,6 +74,25 @@ services:
       start_period: 5s
     init: true
     restart: unless-stopped
+
+  seed:
+    image: ${BACKEND_IMAGE:-pocket-mvp-backend}
+    entrypoint: ["/app/pocket-seed"]
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DATABASE_URL: postgres://${POSTGRES_USER:-pocket}:${POSTGRES_PASSWORD:-pocket_local_password}@postgres:5432/${POSTGRES_DB:-pocket}?sslmode=disable
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_CONNECT_TIMEOUT: ${DATABASE_CONNECT_TIMEOUT:-15s}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+      DATA_LOOKUP_KEY: ${DATA_LOOKUP_KEY:-ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=}
+      DEMO_EMAIL: ${DEMO_EMAIL:-demo@pocket.local}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-PocketDemo123!}
+      ALLOW_DEMO_SEED: ${ALLOW_DEMO_SEED:-false}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    profiles: ["tools"]
+    restart: "no"
 
   frontend:
     build:
