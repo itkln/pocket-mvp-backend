@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -20,20 +21,23 @@ type PasswordResetSender interface {
 }
 
 type PasswordResetOptions struct {
-	Sender  PasswordResetSender
-	BaseURL string
-	TTL     time.Duration
+	Sender PasswordResetSender
+	// BaseURL is the Vendor origin, also used by legacy requests without product.
+	BaseURL      string
+	SpotsBaseURL string
+	TTL          time.Duration
 }
 
 type Service struct {
-	repository   Repository
-	protector    *security.DataProtector
-	capabilities CapabilityReader
-	ttl          time.Duration
-	dummyHash    string
-	resetSender  PasswordResetSender
-	resetBaseURL string
-	resetTTL     time.Duration
+	repository        Repository
+	protector         *security.DataProtector
+	capabilities      CapabilityReader
+	ttl               time.Duration
+	dummyHash         string
+	resetSender       PasswordResetSender
+	resetBaseURL      string
+	resetSpotsBaseURL string
+	resetTTL          time.Duration
 }
 
 func NewService(repository Repository, protector *security.DataProtector, capabilities CapabilityReader, ttl time.Duration, reset PasswordResetOptions) (*Service, error) {
@@ -45,16 +49,37 @@ func NewService(repository Repository, protector *security.DataProtector, capabi
 		reset.Sender == nil || strings.TrimSpace(reset.BaseURL) == "" || ttl <= 0 || reset.TTL <= 0 {
 		return nil, errors.New("identity service configuration is incomplete")
 	}
+	vendorURL, err := passwordResetBaseURL(reset.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("vendor password reset URL: %w", err)
+	}
+	spotsURL, err := passwordResetBaseURL(reset.SpotsBaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("spots password reset URL: %w", err)
+	}
 	return &Service{
-		repository:   repository,
-		protector:    protector,
-		capabilities: capabilities,
-		ttl:          ttl,
-		dummyHash:    dummyHash,
-		resetSender:  reset.Sender,
-		resetBaseURL: strings.TrimRight(reset.BaseURL, "/"),
-		resetTTL:     reset.TTL,
+		repository:        repository,
+		protector:         protector,
+		capabilities:      capabilities,
+		ttl:               ttl,
+		dummyHash:         dummyHash,
+		resetSender:       reset.Sender,
+		resetBaseURL:      vendorURL,
+		resetSpotsBaseURL: spotsURL,
+		resetTTL:          reset.TTL,
 	}, nil
+}
+
+// Only configured origins can receive tokens. Never derive these from request
+// Host/Origin headers or a caller-supplied redirect URL.
+func passwordResetBaseURL(value string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") ||
+		u.Hostname() == "" || u.User != nil || (u.Path != "" && u.Path != "/") ||
+		u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {
+		return "", errors.New("must be an absolute HTTP(S) origin without credentials, path, query or fragment")
+	}
+	return u.Scheme + "://" + u.Host, nil
 }
 
 func (s *Service) Register(ctx context.Context, input RegisterInput) (User, Session, error) {

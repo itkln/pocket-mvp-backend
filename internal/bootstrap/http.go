@@ -44,9 +44,10 @@ func NewHTTPHandler(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) (h
 		capabilityReader,
 		cfg.SessionTTL,
 		identity.PasswordResetOptions{
-			Sender:  resetSender,
-			BaseURL: cfg.AppBaseURL,
-			TTL:     cfg.PasswordResetTTL,
+			Sender:       resetSender,
+			BaseURL:      cfg.AppBaseURL,
+			SpotsBaseURL: cfg.SpotsAppBaseURL,
+			TTL:          cfg.PasswordResetTTL,
 		},
 	)
 	if err != nil {

@@ -13,6 +13,14 @@ import (
 const passwordResetCooldown = time.Minute
 
 func (s *Service) RequestPasswordReset(ctx context.Context, input PasswordResetRequest) error {
+	baseURL := s.resetBaseURL
+	switch input.Product {
+	case "", "vendor": // Keep pre-split clients compatible with Vendor.
+	case "spots", "eats": // "eats" is a temporary compatibility alias.
+		baseURL = s.resetSpotsBaseURL
+	default:
+		return ErrInvalidInput
+	}
 	email := security.NormalizeEmail(input.Email)
 	if !validEmail(email) {
 		return nil
@@ -47,7 +55,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, input PasswordResetR
 	}
 
 	locale := normalizeResetLocale(input.Locale)
-	resetURL := fmt.Sprintf("%s/%s/reset-password?token=%s", s.resetBaseURL, locale, url.QueryEscape(token))
+	resetURL := fmt.Sprintf("%s/%s/reset-password?token=%s", baseURL, locale, url.QueryEscape(token))
 	if err = s.resetSender.SendPasswordReset(ctx, email, resetURL, locale); err != nil {
 		_ = s.repository.DeletePasswordReset(ctx, tokenHash)
 		return fmt.Errorf("send password reset: %w", err)

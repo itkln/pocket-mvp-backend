@@ -10,8 +10,9 @@ payments, and operations.
 - `chi` routing with routes grouped by business domain.
 - PostgreSQL 17 with persistent local storage.
 - Versioned SQL migrations executed before the API starts.
-- Production Next.js frontend image from the sibling `frontend` repository.
-- Health-gated startup: PostgreSQL -> migrations -> backend -> frontend.
+- Separate Pocket Vendor and Pocket Spots Next.js images from the sibling
+  `frontend` repository.
+- Health-gated startup: PostgreSQL -> migrations -> backend -> both frontends.
 - Secure account authentication with Argon2id password hashes, encrypted personal
   data, rate-limited login attempts, and revocable HttpOnly cookie sessions.
 
@@ -36,7 +37,8 @@ docker compose ps
 
 Services:
 
-- Frontend: http://localhost:3000
+- Pocket Vendor: http://localhost:3000
+- Pocket Spots: http://localhost:3001
 - API metadata: http://localhost:8080/api/v1
 - API liveness: http://localhost:8080/healthz
 - API readiness: http://localhost:8080/readyz
@@ -62,7 +64,8 @@ Populate a local database with a repeatable owner workspace:
 make seed-demo
 ```
 
-Then open http://localhost:3000 and sign in with:
+Then open Pocket Vendor at http://localhost:3000 or Pocket Spots at
+http://localhost:3001 and sign in with:
 
 - E-mail: `demo@pocket.local`
 - Password: `PocketDemo123!`
@@ -115,8 +118,10 @@ Endpoints under `/api/v1/auth`:
 - `POST /login` verifies credentials and creates a new session.
 - `GET /me` returns the user represented by the HttpOnly session cookie.
 - `POST /logout` revokes the session and clears the cookie.
-- `POST /password-reset/request` accepts an e-mail and always returns the same
-  response, whether or not the account exists.
+- `POST /password-reset/request` accepts `email`, `locale`, and `product`
+  (`spots` or `vendor`) and returns the same 202 response whether or not the
+  account exists. Missing `product` retains the legacy Vendor destination;
+  unknown values return 422 before account lookup.
 - `POST /password-reset/confirm` consumes a single-use reset token, updates the
   Argon2id password hash, and revokes every existing session for the account.
 
@@ -130,6 +135,42 @@ Password-reset tokens are also stored only as SHA-256 hashes and expire after
 backend log. Set `SMTP_ADDRESS`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and
 `SMTP_FROM` to deliver real e-mail; production startup requires SMTP to be
 configured.
+
+Reset links return to the originating product using **server-configured origins**:
+
+- `VENDOR_APP_BASE_URL`: Vendor origin; falls back to legacy `APP_BASE_URL`, then
+  `http://localhost:3000`.
+- `SPOTS_APP_BASE_URL`: Spots origin; defaults to `http://localhost:3001` only in
+  development and is required in other environments.
+- `EATS_APP_BASE_URL` is accepted only as a deprecated migration fallback when
+  `SPOTS_APP_BASE_URL` is unset. Reset API requests with `product: "eats"` are
+  likewise routed to Spots temporarily; new clients must send `product: "spots"`.
+
+Set both to the externally reachable HTTPS origins in production (and adjust
+them when changing local frontend ports). Origins must not contain credentials,
+paths, queries, or fragments. The server never builds reset links from request
+Host/Origin headers or arbitrary return URLs. The product selects only the
+destination, not a different account/password or permission set. Locale is
+preserved; successful reset returns to the local login page in the same app.
+
+### Password recovery integration test (E-03)
+
+`go test ./...` runs the unit/regression tests. The opt-in test below additionally
+uses the real router, PostgreSQL migrations and the SMTP sender with a local TCP
+mail capture server; it never sends external e-mail:
+
+```bash
+TEST_DATABASE_URL='postgres://user:password@127.0.0.1:55433/pocket_e03_test?sslmode=disable' \
+  go test ./internal/bootstrap -run TestPasswordRecoveryIntegration -count=1 -v
+```
+
+Use a disposable PostgreSQL database whose name ends in `_test`. The test creates
+and removes its own schema, and requires permission to install `pgcrypto` and
+`btree_gist`. It checks Spots and legacy Vendor destinations, locale, hashed-token
+storage and TTL, concurrent single-use consumption, expiration, revocation of
+all old sessions, login with the new password, and non-enumerating responses.
+Production SMTP delivery/TLS and public domains still need environment-specific
+deployment verification.
 
 Generate independent production keys and enable secure cookies behind HTTPS:
 

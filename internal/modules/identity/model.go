@@ -36,6 +36,7 @@ type LoginInput struct {
 type PasswordResetRequest struct {
 	Email     string
 	Locale    string
+	Product   string
 	IPAddress string
 }
 

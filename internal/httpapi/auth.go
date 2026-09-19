@@ -43,8 +43,9 @@ type loginRequest struct {
 }
 
 type passwordResetRequest struct {
-	Email  string `json:"email"`
-	Locale string `json:"locale"`
+	Email   string `json:"email"`
+	Locale  string `json:"locale"`
+	Product string `json:"product"`
 }
 
 type passwordResetConfirmation struct {
@@ -188,9 +189,13 @@ func (api *API) requestPasswordReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := api.identity.RequestPasswordReset(r.Context(), identity.PasswordResetRequest{
-		Email: request.Email, Locale: request.Locale, IPAddress: clientIP(r),
+		Email: request.Email, Locale: request.Locale, Product: request.Product, IPAddress: clientIP(r),
 	})
 	if err != nil {
+		if errors.Is(err, identity.ErrInvalidInput) {
+			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте введенные данные")
+			return
+		}
 		api.logger.Error("request password reset", "error", err)
 		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Не удалось выполнить запрос")
 		return
