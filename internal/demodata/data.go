@@ -108,8 +108,12 @@ func demoVenues() []venueSeed {
 
 func mainVenueSettings() map[string]any {
 	return map[string]any{
-		"cover_image_url":  "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1600&q=85",
-		"schedule_enabled": true, "same_day_booking": true,
+		"cover_image_url":     "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1600&q=85",
+		"public_category":     "restaurants",
+		"public_filters":      []string{"Европейская", "Лучшие", "Открыто", "С предзаказом", "Рядом"},
+		"public_tags":         []string{"Стол через 20 мин", "Предзаказ доступен"},
+		"public_search_terms": "ресторан бистро европейская кухня",
+		"schedule_enabled":    true, "same_day_booking": true,
 		"dine_in_enabled": true, "pickup_enabled": true, "preorder_enabled": true,
 		"floor_plan": []map[string]any{
 			{"id": "floor-main-1", "name": "1 этаж", "tables": []map[string]any{
@@ -141,8 +145,12 @@ func mainVenueSettings() map[string]any {
 
 func secondaryVenueSettings() map[string]any {
 	return map[string]any{
-		"cover_image_url":  "https://images.unsplash.com/photo-1445116572660-236099ec97a0?auto=format&fit=crop&w=1600&q=85",
-		"schedule_enabled": true, "same_day_booking": false,
+		"cover_image_url":     "https://images.unsplash.com/photo-1445116572660-236099ec97a0?auto=format&fit=crop&w=1600&q=85",
+		"public_category":     "restaurants",
+		"public_filters":      []string{"Кофе и десерты", "Лучшие", "Открыто", "Рядом"},
+		"public_tags":         []string{"Открыто сейчас", "Столик у окна"},
+		"public_search_terms": "кофейня кофе десерты обжарка",
+		"schedule_enabled":    true, "same_day_booking": false,
 		"dine_in_enabled": true, "pickup_enabled": true, "preorder_enabled": false,
 		"floor_plan": []map[string]any{{"id": "floor-coffee-1", "name": "Основной зал", "tables": []map[string]any{
 			{"id": "C1", "seats": 2, "x": 15, "y": 20, "state": "free"},

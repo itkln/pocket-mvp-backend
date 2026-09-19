@@ -23,6 +23,28 @@ func (s *Service) List(ctx context.Context, ownerID string) ([]Venue, error) {
 	return s.repository.List(ctx, ownerID)
 }
 
+func (s *Service) SearchPublished(ctx context.Context, query PublicVenueQuery) (PublicVenuePage, error) {
+	query = normalizePublicQuery(query)
+	if !validPublicQuery(query) {
+		return PublicVenuePage{}, appfault.ErrInvalidInput
+	}
+	items, total, err := s.repository.SearchPublished(ctx, query)
+	if err != nil {
+		return PublicVenuePage{}, err
+	}
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + query.PageSize - 1) / query.PageSize
+	}
+	if items == nil {
+		items = []PublicVenue{}
+	}
+	return PublicVenuePage{
+		Venues: items, Page: query.Page, PageSize: query.PageSize, Total: total,
+		TotalPages: totalPages, HasNext: query.Page < totalPages,
+	}, nil
+}
+
 func (s *Service) Create(ctx context.Context, ownerID string, input Input) (Venue, error) {
 	input = normalizeInput(input)
 	if !validInput(input) {
@@ -80,6 +102,29 @@ func normalizeInput(input Input) Input {
 		input.Settings = map[string]any{}
 	}
 	return input
+}
+
+func normalizePublicQuery(query PublicVenueQuery) PublicVenueQuery {
+	query.City = strings.TrimSpace(query.City)
+	query.Search = strings.TrimSpace(query.Search)
+	query.Category = strings.ToLower(strings.TrimSpace(query.Category))
+	query.Filter = strings.TrimSpace(query.Filter)
+	if query.Filter == "Все" || strings.EqualFold(query.Filter, "all") {
+		query.Filter = ""
+	}
+	if query.Page == 0 {
+		query.Page = 1
+	}
+	if query.PageSize == 0 {
+		query.PageSize = 24
+	}
+	return query
+}
+
+func validPublicQuery(query PublicVenueQuery) bool {
+	validCategory := regexp.MustCompile(`^[a-z0-9-]*$`).MatchString(query.Category)
+	return query.Page > 0 && query.Page <= 100000 && query.PageSize > 0 && query.PageSize <= 50 &&
+		len(query.City) <= 120 && len(query.Search) <= 120 && len(query.Filter) <= 80 && validCategory
 }
 
 func validInput(input Input) bool {

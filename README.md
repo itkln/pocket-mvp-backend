@@ -183,6 +183,20 @@ COOKIE_SECURE=true
 Never reuse the example development keys outside local development. Rotating the
 encryption key requires a planned data re-encryption migration.
 
+## Public venue catalog
+
+Pocket Spots reads published venues without authentication from
+`GET /api/v1/public/venues`. Only non-deleted venues with `status=active` are
+returned. Supported query parameters are `city`, `q`, `category`, `filter`,
+`page`, and `page_size` (maximum 50). The response includes a public venue read
+model plus `total`, `total_pages`, and `has_next`; owner contact details and raw
+venue settings are never exposed.
+
+Venue settings may define `public_category`, `public_filters`, `public_tags`,
+`public_search_terms`, and `cover_image_url`. Missing or invalid categories fall
+back to `restaurants`, so every newly published Vendor venue is discoverable.
+Published review aggregates supply `rating` and `review_count`.
+
 ## Tests
 
 ```bash

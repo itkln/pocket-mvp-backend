@@ -17,6 +17,7 @@ func (api *API) routes() http.Handler {
 	router.Get("/healthz", api.health)
 	router.Get("/readyz", api.ready)
 	router.Get("/api/v1", api.serviceInfo)
+	router.Get("/api/v1/public/venues", api.searchPublicVenues)
 
 	router.Route("/api/v1/auth", func(router chi.Router) {
 		router.Post("/register", api.register)

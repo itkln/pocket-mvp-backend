@@ -35,6 +35,7 @@ type IdentityService interface {
 
 type VenueService interface {
 	List(context.Context, string) ([]venues.Venue, error)
+	SearchPublished(context.Context, venues.PublicVenueQuery) (venues.PublicVenuePage, error)
 	Create(context.Context, string, venues.Input) (venues.Venue, error)
 	Update(context.Context, string, string, venues.Input) (venues.Venue, error)
 	Delete(context.Context, string, string) error

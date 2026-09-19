@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,6 +43,98 @@ func (r *PostgresRepository) List(ctx context.Context, ownerID string) ([]Venue,
 		result = append(result, venue)
 	}
 	return result, rows.Err()
+}
+
+func (r *PostgresRepository) SearchPublished(ctx context.Context, query PublicVenueQuery) ([]PublicVenue, int, error) {
+	searchTerms := strings.Fields(query.Search)
+	rows, err := r.db.Query(ctx, `
+		WITH catalog AS (
+			SELECT v.id::text, v.slug, v.name, COALESCE(v.description, '') AS description,
+			       CASE WHEN v.settings ->> 'public_category' IN (
+			         'restaurants', 'entertainment', 'activities', 'sports', 'yoga-pilates',
+			         'spa-massage', 'beauty', 'masterclasses'
+			       ) THEN v.settings ->> 'public_category' ELSE 'restaurants' END AS category_slug,
+			       COALESCE(v.cuisine_type, '') AS cuisine_type, v.address_line1, v.city,
+			       v.country_code, v.settings, v.created_at,
+			       COALESCE(ROUND(AVG(r.rating)::numeric, 1)::float8, 0) AS rating,
+			       COUNT(r.id)::int AS review_count
+			FROM venues v
+			LEFT JOIN reviews r ON r.venue_id = v.id AND r.status = 'published'
+			WHERE v.status = 'active' AND v.deleted_at IS NULL
+			GROUP BY v.id
+		), searchable_catalog AS (
+			SELECT *, concat_ws(' ', name, description, cuisine_type, address_line1, city,
+			       COALESCE(settings ->> 'public_search_terms', '')) AS searchable
+			FROM catalog
+		), filtered AS (
+			SELECT *
+			FROM searchable_catalog
+			WHERE ($1 = '' OR lower(city) = lower($1))
+			  AND ($2::text[] = '{}'::text[] OR NOT EXISTS (
+				SELECT 1 FROM unnest($2::text[]) term WHERE searchable NOT ILIKE '%' || term || '%'
+			  ))
+			  AND ($3 = '' OR category_slug = $3)
+		)
+		SELECT id, slug, name, description, category_slug, cuisine_type, address_line1,
+		       city, country_code, settings, rating, review_count, created_at,
+		       COUNT(*) OVER()::bigint
+		FROM filtered
+		WHERE $4 = ''
+		   OR (lower($4) = lower('Лучшие') AND rating >= 4.5)
+		   OR lower($4) = lower('Открыто')
+		   OR (lower($4) = lower('С предзаказом') AND CASE
+		         WHEN jsonb_typeof(settings -> 'preorder_enabled') = 'boolean'
+		         THEN (settings ->> 'preorder_enabled')::boolean ELSE false END)
+		   OR cuisine_type ILIKE '%' || $4 || '%'
+		   OR EXISTS (
+			 SELECT 1
+			 FROM jsonb_array_elements_text(
+			   CASE WHEN jsonb_typeof(settings -> 'public_filters') = 'array'
+			        THEN settings -> 'public_filters' ELSE '[]'::jsonb END
+			 ) item
+			 WHERE lower(item) = lower($4)
+		   )
+		ORDER BY rating DESC, review_count DESC, created_at DESC, id
+		LIMIT $5 OFFSET $6`,
+		query.City, searchTerms, query.Category, query.Filter,
+		query.PageSize, (query.Page-1)*query.PageSize,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	items := []PublicVenue{}
+	total := 0
+	for rows.Next() {
+		var item PublicVenue
+		var settings []byte
+		var rowTotal int64
+		if err := rows.Scan(
+			&item.ID, &item.Slug, &item.Name, &item.Description, &item.CategorySlug,
+			&item.CuisineType, &item.Address, &item.City, &item.CountryCode, &settings,
+			&item.Rating, &item.ReviewCount, &item.CreatedAt, &rowTotal,
+		); err != nil {
+			return nil, 0, err
+		}
+		var publicSettings map[string]any
+		if err := json.Unmarshal(settings, &publicSettings); err != nil {
+			return nil, 0, fmt.Errorf("decode public venue settings: %w", err)
+		}
+		item.ImageURL = settingString(publicSettings, "cover_image_url")
+		item.PreorderEnabled = settingBool(publicSettings, "preorder_enabled")
+		item.Tags = settingStrings(publicSettings, "public_tags")
+		item.Filters = settingStrings(publicSettings, "public_filters")
+		if item.Tags == nil {
+			item.Tags = []string{}
+		}
+		if item.Filters == nil {
+			item.Filters = []string{}
+		}
+		items = append(items, item)
+		total = int(rowTotal)
+	}
+	return items, total, rows.Err()
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, ownerID, slug string, input Input) (Venue, error) {
@@ -148,4 +241,28 @@ func scanVenue(row venueScanner) (Venue, error) {
 		venue.Settings = map[string]any{}
 	}
 	return venue, nil
+}
+
+func settingString(settings map[string]any, key string) string {
+	value, _ := settings[key].(string)
+	return value
+}
+
+func settingBool(settings map[string]any, key string) bool {
+	value, _ := settings[key].(bool)
+	return value
+}
+
+func settingStrings(settings map[string]any, key string) []string {
+	values, ok := settings[key].([]any)
+	if !ok {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+			result = append(result, text)
+		}
+	}
+	return result
 }
