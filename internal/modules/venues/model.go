@@ -63,6 +63,7 @@ type PublicVenueQuery struct {
 	Search   string
 	Category string
 	Filter   string
+	IDs      []string
 	Page     int
 	PageSize int
 }

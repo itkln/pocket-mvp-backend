@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"pocket-mvp-backend/internal/modules/venues"
@@ -24,6 +25,9 @@ func (s *venueRouteSpy) List(context.Context, string) ([]venues.Venue, error) {
 func (s *venueRouteSpy) SearchPublished(_ context.Context, query venues.PublicVenueQuery) (venues.PublicVenuePage, error) {
 	s.query = query
 	return venues.PublicVenuePage{Venues: []venues.PublicVenue{}, Page: query.Page, PageSize: query.PageSize}, nil
+}
+func (s *venueRouteSpy) GetPublished(context.Context, string) (venues.PublicVenue, error) {
+	return venues.PublicVenue{}, nil
 }
 
 func (s *venueRouteSpy) Create(context.Context, string, venues.Input) (venues.Venue, error) {
@@ -44,7 +48,7 @@ func TestPublicVenueRoutePassesCatalogQueryWithoutAuthentication(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
 	}
 	want := venues.PublicVenueQuery{City: "Bratislava", Search: "coffee", Category: "restaurants", Filter: "Open", Page: 2, PageSize: 12}
-	if venueService.query != want {
+	if !reflect.DeepEqual(venueService.query, want) {
 		t.Fatalf("unexpected public query: %#v", venueService.query)
 	}
 }
@@ -57,6 +61,23 @@ func TestPublicVenueRouteRejectsInvalidPagination(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/public/venues?page=zero", nil))
 	if response.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestPublicVenueRoutePassesStableIDsAndRejectsMalformedIDLists(t *testing.T) {
+	venueService := &venueRouteSpy{}
+	handler := New(Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Venues: venueService})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/public/venues?ids=11111111-1111-4111-8111-111111111111,22222222-2222-4222-8222-222222222222", nil))
+	if response.Code != http.StatusOK || len(venueService.query.IDs) != 2 {
+		t.Fatalf("ID query: %d, %#v", response.Code, venueService.query.IDs)
+	}
+	for _, path := range []string{"/api/v1/public/venues?ids=", "/api/v1/public/venues?ids=x&ids=y"} {
+		response = httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		if response.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("malformed IDs %q: %d", path, response.Code)
+		}
 	}
 }
 

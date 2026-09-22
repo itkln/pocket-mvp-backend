@@ -19,13 +19,34 @@ payments, and operations.
 ## Architecture
 
 The API is a modular monolith split into bounded contexts under
-`internal/modules`: identity, venues, catalog, workforce, ordering, feedback,
+`internal/modules`: identity, venues, favorites, catalog, workforce, ordering, feedback,
 billing, floor plan, and reporting. Each domain separates use-case services,
 repository ports, and PostgreSQL adapters. HTTP handlers depend on narrow
 interfaces, and architecture tests enforce domain and persistence boundaries.
 
 See [docs/architecture.md](docs/architecture.md) for dependency rules, data
 ownership, and the path for extracting a module into a microservice.
+
+## Pocket Spots saved venues (E-07)
+
+Authenticated routes under `/api/v1/spots/me/saved-venues` use the session
+cookie, never a client-supplied user ID:
+
+- `GET` returns `{ "venue_ids": ["..."] }` in most-recent-first order.
+- `PUT /{venueID}` saves a published venue; repeated calls are idempotent.
+- `DELETE /{venueID}` removes it; repeated calls are idempotent.
+
+Invalid IDs return 422, unpublished or missing venues return 404 on save, and
+guests receive 401. The public catalog accepts up to 50 comma-separated UUIDs
+in `GET /api/v1/public/venues?ids=...` for bulk hydration. The
+`GET /api/v1/public/venues/{venueID}` endpoint returns a current, published
+venue read model.
+Favorites persist only stable UUIDs, so renames and multi-device sessions stay
+in sync. Legacy browser favorites stored by name are intentionally not
+auto-imported because duplicate names cannot be resolved safely to an ID.
+
+`TestSavedVenuesIntegration` is opt-in via `TEST_DATABASE_URL` and requires an
+isolated PostgreSQL database whose name ends in `_test`.
 
 ## Run the complete stack
 

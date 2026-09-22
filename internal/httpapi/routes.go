@@ -18,6 +18,10 @@ func (api *API) routes() http.Handler {
 	router.Get("/readyz", api.ready)
 	router.Get("/api/v1", api.serviceInfo)
 	router.Get("/api/v1/public/venues", api.searchPublicVenues)
+	router.Get("/api/v1/public/venues/{venueID}", api.getPublicVenue)
+	router.Get("/api/v1/spots/me/saved-venues", api.listSavedVenues)
+	router.Put("/api/v1/spots/me/saved-venues/{venueID}", api.addSavedVenue)
+	router.Delete("/api/v1/spots/me/saved-venues/{venueID}", api.removeSavedVenue)
 
 	router.Route("/api/v1/auth", func(router chi.Router) {
 		router.Post("/register", api.register)

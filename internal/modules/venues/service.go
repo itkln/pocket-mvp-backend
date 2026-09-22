@@ -45,6 +45,24 @@ func (s *Service) SearchPublished(ctx context.Context, query PublicVenueQuery) (
 	}, nil
 }
 
+func (s *Service) GetPublished(ctx context.Context, venueID string) (PublicVenue, error) {
+	if !validVenueID(venueID) {
+		return PublicVenue{}, appfault.ErrInvalidInput
+	}
+	return s.repository.GetPublished(ctx, venueID)
+}
+
+func (s *Service) IsPublished(ctx context.Context, venueID string) (bool, error) {
+	if !validVenueID(venueID) {
+		return false, appfault.ErrInvalidInput
+	}
+	return s.repository.IsPublished(ctx, venueID)
+}
+
+var venueIDPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+func validVenueID(id string) bool { return venueIDPattern.MatchString(id) }
+
 func (s *Service) Create(ctx context.Context, ownerID string, input Input) (Venue, error) {
 	input = normalizeInput(input)
 	if !validInput(input) {
@@ -118,11 +136,22 @@ func normalizePublicQuery(query PublicVenueQuery) PublicVenueQuery {
 	if query.PageSize == 0 {
 		query.PageSize = 24
 	}
+	if query.IDs == nil {
+		query.IDs = []string{}
+	}
 	return query
 }
 
 func validPublicQuery(query PublicVenueQuery) bool {
 	validCategory := regexp.MustCompile(`^[a-z0-9-]*$`).MatchString(query.Category)
+	if len(query.IDs) > 50 {
+		return false
+	}
+	for _, id := range query.IDs {
+		if !validVenueID(id) {
+			return false
+		}
+	}
 	return query.Page > 0 && query.Page <= 100000 && query.PageSize > 0 && query.PageSize <= 50 &&
 		len(query.City) <= 120 && len(query.Search) <= 120 && len(query.Filter) <= 80 && validCategory
 }

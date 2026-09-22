@@ -74,6 +74,7 @@ changing the service.
 | Module | Owns |
 | --- | --- |
 | `identity` | Accounts, encrypted personal data, credentials, sessions, login throttling |
+| `favorites` | Pocket Spots saved venue IDs per account; no venue or identity records |
 | `venues` | Venue profile and lifecycle |
 | `catalog` | Menu categories, items, prices, availability, images |
 | `workforce` | Invitations, venue roles, staff lifecycle |
@@ -107,6 +108,13 @@ owner, and command-side SQL belongs in that owner's PostgreSQL adapter.
 Cross-domain joins are reserved for explicit read models such as `reporting` and
 access projections. New command paths should communicate through ports or
 events instead of adding cross-domain joins.
+
+Spots favorites stores only user and venue UUIDs in `spots_saved_venues`. It
+checks publishability through a `VenueAvailability` port wired in bootstrap and
+does not join or foreign-key to another context's tables. The public venue
+read API resolves current names and metadata, so renames never change favorite
+identity. In a service split, replace the in-process port with a catalog client
+or publication projection; keep the `/api/v1/spots/me/saved-venues` contract.
 
 Transactions belong in repository adapters. Validation, password hashing,
 encryption, and decisions such as subscription limits stay in services.

@@ -36,9 +36,16 @@ type IdentityService interface {
 type VenueService interface {
 	List(context.Context, string) ([]venues.Venue, error)
 	SearchPublished(context.Context, venues.PublicVenueQuery) (venues.PublicVenuePage, error)
+	GetPublished(context.Context, string) (venues.PublicVenue, error)
 	Create(context.Context, string, venues.Input) (venues.Venue, error)
 	Update(context.Context, string, string, venues.Input) (venues.Venue, error)
 	Delete(context.Context, string, string) error
+}
+
+type FavoritesService interface {
+	List(context.Context, string) ([]string, error)
+	Add(context.Context, string, string) error
+	Remove(context.Context, string, string) error
 }
 
 type CatalogService interface {
@@ -93,6 +100,7 @@ type Dependencies struct {
 	Build          buildinfo.Info
 	Identity       IdentityService
 	Venues         VenueService
+	Favorites      FavoritesService
 	Catalog        CatalogService
 	Workforce      WorkforceService
 	Ordering       OrderingService
@@ -112,6 +120,7 @@ type API struct {
 	startedAt      time.Time
 	identity       IdentityService
 	venues         VenueService
+	favorites      FavoritesService
 	catalog        CatalogService
 	workforce      WorkforceService
 	ordering       OrderingService

@@ -61,6 +61,7 @@ func (r *PostgresRepository) SearchPublished(ctx context.Context, query PublicVe
 			FROM venues v
 			LEFT JOIN reviews r ON r.venue_id = v.id AND r.status = 'published'
 			WHERE v.status = 'active' AND v.deleted_at IS NULL
+			  AND ($7::text[] = '{}'::text[] OR v.id::text = ANY($7::text[]))
 			GROUP BY v.id
 		), searchable_catalog AS (
 			SELECT *, concat_ws(' ', name, description, cuisine_type, address_line1, city,
@@ -97,7 +98,7 @@ func (r *PostgresRepository) SearchPublished(ctx context.Context, query PublicVe
 		ORDER BY rating DESC, review_count DESC, created_at DESC, id
 		LIMIT $5 OFFSET $6`,
 		query.City, searchTerms, query.Category, query.Filter,
-		query.PageSize, (query.Page-1)*query.PageSize,
+		query.PageSize, (query.Page-1)*query.PageSize, query.IDs,
 	)
 	if err != nil {
 		return nil, 0, err
@@ -135,6 +136,56 @@ func (r *PostgresRepository) SearchPublished(ctx context.Context, query PublicVe
 		total = int(rowTotal)
 	}
 	return items, total, rows.Err()
+}
+
+func (r *PostgresRepository) IsPublished(ctx context.Context, venueID string) (bool, error) {
+	var published bool
+	err := r.db.QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM venues WHERE id = $1 AND status = 'active' AND deleted_at IS NULL
+	)`, venueID).Scan(&published)
+	return published, err
+}
+
+func (r *PostgresRepository) GetPublished(ctx context.Context, venueID string) (PublicVenue, error) {
+	row := r.db.QueryRow(ctx, `
+		SELECT v.id::text, v.slug, v.name, COALESCE(v.description, ''),
+		       CASE WHEN v.settings ->> 'public_category' IN (
+		         'restaurants', 'entertainment', 'activities', 'sports', 'yoga-pilates',
+		         'spa-massage', 'beauty', 'masterclasses'
+		       ) THEN v.settings ->> 'public_category' ELSE 'restaurants' END,
+		       COALESCE(v.cuisine_type, ''), v.address_line1, v.city, v.country_code,
+		       v.settings, COALESCE(ROUND(AVG(reviews.rating)::numeric, 1)::float8, 0),
+		       COUNT(reviews.id)::int, v.created_at
+		FROM venues v
+		LEFT JOIN reviews ON reviews.venue_id = v.id AND reviews.status = 'published'
+		WHERE v.id = $1 AND v.status = 'active' AND v.deleted_at IS NULL
+		GROUP BY v.id`, venueID)
+	var item PublicVenue
+	var settings []byte
+	err := row.Scan(&item.ID, &item.Slug, &item.Name, &item.Description, &item.CategorySlug,
+		&item.CuisineType, &item.Address, &item.City, &item.CountryCode, &settings,
+		&item.Rating, &item.ReviewCount, &item.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return PublicVenue{}, appfault.ErrNotFound
+	}
+	if err != nil {
+		return PublicVenue{}, err
+	}
+	var publicSettings map[string]any
+	if err := json.Unmarshal(settings, &publicSettings); err != nil {
+		return PublicVenue{}, fmt.Errorf("decode public venue settings: %w", err)
+	}
+	item.ImageURL = settingString(publicSettings, "cover_image_url")
+	item.PreorderEnabled = settingBool(publicSettings, "preorder_enabled")
+	item.Tags = settingStrings(publicSettings, "public_tags")
+	item.Filters = settingStrings(publicSettings, "public_filters")
+	if item.Tags == nil {
+		item.Tags = []string{}
+	}
+	if item.Filters == nil {
+		item.Filters = []string{}
+	}
+	return item, nil
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, ownerID, slug string, input Input) (Venue, error) {
