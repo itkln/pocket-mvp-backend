@@ -13,18 +13,18 @@ import (
 func (api *API) searchPublicVenues(w http.ResponseWriter, r *http.Request) {
 	page, ok := positiveQueryInt(r, "page", 1)
 	if !ok {
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте параметры каталога")
+		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the catalog parameters.")
 		return
 	}
 	pageSize, ok := positiveQueryInt(r, "page_size", 24)
 	if !ok {
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте параметры каталога")
+		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the catalog parameters.")
 		return
 	}
 	var ids []string
 	if raw, present := r.URL.Query()["ids"]; present {
 		if len(raw) != 1 || strings.TrimSpace(raw[0]) == "" {
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте параметры каталога")
+			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the catalog parameters.")
 			return
 		}
 		ids = strings.Split(raw[0], ",")
@@ -36,11 +36,11 @@ func (api *API) searchPublicVenues(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, appfault.ErrInvalidInput) {
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте параметры каталога")
+			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the catalog parameters.")
 			return
 		}
 		api.logger.Error("public venue search failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Не удалось загрузить каталог")
+		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The catalog could not be loaded.")
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -51,12 +51,12 @@ func (api *API) getPublicVenue(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, appfault.ErrInvalidInput):
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Некорректный ID заведения")
+			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Invalid venue ID.")
 		case errors.Is(err, appfault.ErrNotFound):
-			writeAPIError(w, http.StatusNotFound, "not_found", "Заведение не найдено")
+			writeAPIError(w, http.StatusNotFound, "not_found", "Venue not found.")
 		default:
 			api.logger.Error("public venue details failed", "error", err)
-			writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Не удалось загрузить заведение")
+			writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The venue could not be loaded.")
 		}
 		return
 	}

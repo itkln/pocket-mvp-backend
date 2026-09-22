@@ -16,6 +16,9 @@ payments, and operations.
 - Secure account authentication with Argon2id password hashes, encrypted personal
   data, rate-limited login attempts, and revocable HttpOnly cookie sessions.
 
+API error responses use stable machine-readable codes and English messages.
+Client applications localize those codes for the selected interface language.
+
 ## Architecture
 
 The API is a modular monolith split into bounded contexts under

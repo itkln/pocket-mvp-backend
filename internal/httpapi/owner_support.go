@@ -16,11 +16,11 @@ func decodeOwnerJSON(w http.ResponseWriter, r *http.Request, destination any) bo
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid_request", "Проверьте введенные данные")
+		writeAPIError(w, http.StatusBadRequest, "invalid_request", "Check the submitted data.")
 		return false
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		writeAPIError(w, http.StatusBadRequest, "invalid_request", "Проверьте введенные данные")
+		writeAPIError(w, http.StatusBadRequest, "invalid_request", "Check the submitted data.")
 		return false
 	}
 	return true
@@ -29,13 +29,13 @@ func decodeOwnerJSON(w http.ResponseWriter, r *http.Request, destination any) bo
 func (api *API) writeOwnerError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, appfault.ErrInvalidInput):
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте введенные данные")
+		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the submitted data.")
 	case errors.Is(err, appfault.ErrNotFound):
-		writeAPIError(w, http.StatusNotFound, "not_found", "Объект не найден или недоступен")
+		writeAPIError(w, http.StatusNotFound, "not_found", "The resource was not found or is unavailable.")
 	case errors.Is(err, appfault.ErrConflict):
-		writeAPIError(w, http.StatusConflict, "conflict", "Такой объект уже существует или используется")
+		writeAPIError(w, http.StatusConflict, "conflict", "The resource already exists or is in use.")
 	default:
 		api.logger.Error("owner request failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Не удалось выполнить запрос")
+		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The request could not be completed.")
 	}
 }

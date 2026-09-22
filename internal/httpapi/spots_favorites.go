@@ -50,11 +50,11 @@ func (api *API) removeSavedVenue(w http.ResponseWriter, r *http.Request) {
 func (api *API) writeFavoritesError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, appfault.ErrInvalidInput):
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Некорректный ID заведения")
+		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Invalid venue ID.")
 	case errors.Is(err, appfault.ErrNotFound):
-		writeAPIError(w, http.StatusNotFound, "not_found", "Заведение не найдено")
+		writeAPIError(w, http.StatusNotFound, "not_found", "Venue not found.")
 	default:
 		api.logger.Error("saved venues request failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Не удалось обновить избранное")
+		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Saved places could not be updated.")
 	}
 }

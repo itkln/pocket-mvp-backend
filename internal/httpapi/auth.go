@@ -193,11 +193,11 @@ func (api *API) requestPasswordReset(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, identity.ErrInvalidInput) {
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте введенные данные")
+			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the submitted data.")
 			return
 		}
 		api.logger.Error("request password reset", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Не удалось выполнить запрос")
+		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The request could not be completed.")
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -215,12 +215,12 @@ func (api *API) resetPassword(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, identity.ErrInvalidResetToken):
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_reset_token", "Ссылка недействительна или устарела")
+			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_reset_token", "This link is invalid or has expired.")
 		case errors.Is(err, identity.ErrInvalidInput):
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте введенные данные")
+			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the submitted data.")
 		default:
 			api.logger.Error("reset password", "error", err)
-			writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Не удалось выполнить запрос")
+			writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The request could not be completed.")
 		}
 		return
 	}
@@ -281,7 +281,7 @@ func (api *API) updateAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxAvatarBody+(64<<10))
 	if err := r.ParseMultipartForm(maxAvatarBody); err != nil {
-		writeAPIError(w, http.StatusRequestEntityTooLarge, "avatar_too_large", "Фотография должна быть меньше 2 МБ")
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "avatar_too_large", "The photo must be smaller than 2 MB.")
 		return
 	}
 	if r.MultipartForm != nil {
@@ -289,18 +289,18 @@ func (api *API) updateAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 	file, _, err := r.FormFile("avatar")
 	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid_avatar", "Выберите фотографию")
+		writeAPIError(w, http.StatusBadRequest, "invalid_avatar", "Choose a photo.")
 		return
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, maxAvatarBody+1))
 	if err != nil || len(data) == 0 || len(data) > maxAvatarBody {
-		writeAPIError(w, http.StatusRequestEntityTooLarge, "avatar_too_large", "Фотография должна быть меньше 2 МБ")
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "avatar_too_large", "The photo must be smaller than 2 MB.")
 		return
 	}
 	contentType := http.DetectContentType(data)
 	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_avatar", "Используйте JPEG, PNG или WebP")
+		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_avatar", "Use a JPEG, PNG, or WebP image.")
 		return
 	}
 	updated, err := api.identity.UpdateAvatar(r.Context(), user.ID, contentType, data)
@@ -319,7 +319,7 @@ func (api *API) avatar(w http.ResponseWriter, r *http.Request) {
 	}
 	avatar, err := api.identity.Avatar(r.Context(), user.ID)
 	if errors.Is(err, identity.ErrAvatarNotFound) {
-		writeAPIError(w, http.StatusNotFound, "avatar_not_found", "Фотография не найдена")
+		writeAPIError(w, http.StatusNotFound, "avatar_not_found", "Photo not found.")
 		return
 	}
 	if err != nil {
@@ -357,11 +357,11 @@ func decodeAuthJSON(w http.ResponseWriter, r *http.Request, destination any) boo
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(destination); err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid_request", "Проверьте введенные данные")
+		writeAPIError(w, http.StatusBadRequest, "invalid_request", "Check the submitted data.")
 		return false
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		writeAPIError(w, http.StatusBadRequest, "invalid_request", "Проверьте введенные данные")
+		writeAPIError(w, http.StatusBadRequest, "invalid_request", "Check the submitted data.")
 		return false
 	}
 	return true
@@ -370,20 +370,20 @@ func decodeAuthJSON(w http.ResponseWriter, r *http.Request, destination any) boo
 func (api *API) writeAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, identity.ErrInvalidInput):
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Проверьте поля формы. Пароль должен содержать от 12 до 128 символов")
+		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the form fields. The password must be 12 to 128 characters long.")
 	case errors.Is(err, identity.ErrEmailAlreadyExists):
-		writeAPIError(w, http.StatusConflict, "account_exists", "Аккаунт с таким e-mail уже существует")
+		writeAPIError(w, http.StatusConflict, "account_exists", "An account with this email already exists.")
 	case errors.Is(err, identity.ErrInvalidCredentials):
-		writeAPIError(w, http.StatusUnauthorized, "invalid_credentials", "Неверный e-mail или пароль")
+		writeAPIError(w, http.StatusUnauthorized, "invalid_credentials", "Incorrect email or password.")
 	case errors.Is(err, identity.ErrInvalidCurrentPassword):
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_current_password", "Текущий пароль указан неверно")
+		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_current_password", "The current password is incorrect.")
 	case errors.Is(err, identity.ErrTooManyAttempts):
-		writeAPIError(w, http.StatusTooManyRequests, "too_many_attempts", "Слишком много попыток. Попробуйте через 15 минут")
+		writeAPIError(w, http.StatusTooManyRequests, "too_many_attempts", "Too many attempts. Please try again in 15 minutes.")
 	case errors.Is(err, identity.ErrUnauthorized):
-		writeAPIError(w, http.StatusUnauthorized, "unauthorized", "Требуется вход в аккаунт")
+		writeAPIError(w, http.StatusUnauthorized, "unauthorized", "Sign in to continue.")
 	default:
 		api.logger.Error("authentication request failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "Не удалось выполнить запрос")
+		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The request could not be completed.")
 	}
 }
 
