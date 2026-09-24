@@ -63,6 +63,23 @@ func (api *API) getPublicVenue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"venue": item})
 }
 
+func (api *API) getPublicVenueMenu(w http.ResponseWriter, r *http.Request) {
+	categories, err := api.venues.ListPublishedMenu(r.Context(), pathParam(r, "venueID"))
+	if err != nil {
+		switch {
+		case errors.Is(err, appfault.ErrInvalidInput):
+			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Invalid venue ID.")
+		case errors.Is(err, appfault.ErrNotFound):
+			writeAPIError(w, http.StatusNotFound, "not_found", "Venue not found.")
+		default:
+			api.logger.Error("public venue menu failed", "error", err)
+			writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The menu could not be loaded.")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"categories": categories})
+}
+
 func positiveQueryInt(r *http.Request, name string, fallback int) (int, bool) {
 	value := r.URL.Query().Get(name)
 	if value == "" {

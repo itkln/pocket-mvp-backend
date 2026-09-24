@@ -76,3 +76,19 @@ type PublicVenuePage struct {
 	TotalPages int           `json:"total_pages"`
 	HasNext    bool          `json:"has_next"`
 }
+
+// PublicMenu exposes only visible, available items of a published venue.
+type PublicMenuItem struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	PriceMinor  int    `json:"price_minor"`
+	Currency    string `json:"currency"`
+	ImageURL    string `json:"image_url,omitempty"`
+}
+
+type PublicMenuCategory struct {
+	ID    string           `json:"id"`
+	Name  string           `json:"name"`
+	Items []PublicMenuItem `json:"items"`
+}

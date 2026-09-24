@@ -6,7 +6,9 @@ import (
 )
 
 type repositorySpy struct {
-	query PublicVenueQuery
+	query     PublicVenueQuery
+	published bool
+	menu      []PublicMenuCategory
 }
 
 func (r *repositorySpy) List(context.Context, string) ([]Venue, error) { return nil, nil }
@@ -17,7 +19,10 @@ func (r *repositorySpy) SearchPublished(_ context.Context, query PublicVenueQuer
 func (r *repositorySpy) GetPublished(context.Context, string) (PublicVenue, error) {
 	return PublicVenue{}, nil
 }
-func (r *repositorySpy) IsPublished(context.Context, string) (bool, error) { return true, nil }
+func (r *repositorySpy) IsPublished(context.Context, string) (bool, error) { return r.published, nil }
+func (r *repositorySpy) ListPublishedMenu(context.Context, string) ([]PublicMenuCategory, error) {
+	return r.menu, nil
+}
 func (r *repositorySpy) Create(context.Context, string, string, Input) (Venue, error) {
 	return Venue{}, nil
 }
@@ -65,5 +70,22 @@ func TestSearchPublishedRejectsInvalidAndOversizedIDBatches(t *testing.T) {
 	}
 	if _, err := service.SearchPublished(context.Background(), PublicVenueQuery{IDs: ids}); err == nil {
 		t.Fatal("oversized ID batch was accepted")
+	}
+}
+
+func TestListPublishedMenuExcludesUnpublishedVenueAndNormalizesEmptyList(t *testing.T) {
+	repository := &repositorySpy{}
+	service := NewService(repository)
+	id := "11111111-1111-4111-8111-111111111111"
+	if _, err := service.ListPublishedMenu(context.Background(), "invalid"); err == nil {
+		t.Fatal("invalid ID was accepted")
+	}
+	if _, err := service.ListPublishedMenu(context.Background(), id); err == nil {
+		t.Fatal("unpublished venue was accepted")
+	}
+	repository.published = true
+	menu, err := service.ListPublishedMenu(context.Background(), id)
+	if err != nil || menu == nil || len(menu) != 0 {
+		t.Fatalf("unexpected empty menu: %#v, %v", menu, err)
 	}
 }

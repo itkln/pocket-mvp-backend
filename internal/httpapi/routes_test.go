@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"pocket-mvp-backend/internal/modules/venues"
@@ -16,6 +17,7 @@ type venueRouteSpy struct {
 	ownerID string
 	venueID string
 	query   venues.PublicVenueQuery
+	menu    []venues.PublicMenuCategory
 }
 
 func (s *venueRouteSpy) List(context.Context, string) ([]venues.Venue, error) {
@@ -28,6 +30,10 @@ func (s *venueRouteSpy) SearchPublished(_ context.Context, query venues.PublicVe
 }
 func (s *venueRouteSpy) GetPublished(context.Context, string) (venues.PublicVenue, error) {
 	return venues.PublicVenue{}, nil
+}
+func (s *venueRouteSpy) ListPublishedMenu(_ context.Context, venueID string) ([]venues.PublicMenuCategory, error) {
+	s.venueID = venueID
+	return s.menu, nil
 }
 
 func (s *venueRouteSpy) Create(context.Context, string, venues.Input) (venues.Venue, error) {
@@ -50,6 +56,16 @@ func TestPublicVenueRoutePassesCatalogQueryWithoutAuthentication(t *testing.T) {
 	want := venues.PublicVenueQuery{City: "Bratislava", Search: "coffee", Category: "restaurants", Filter: "Open", Page: 2, PageSize: 12}
 	if !reflect.DeepEqual(venueService.query, want) {
 		t.Fatalf("unexpected public query: %#v", venueService.query)
+	}
+}
+
+func TestPublicVenueMenuIsAvailableWithoutAuthentication(t *testing.T) {
+	venueService := &venueRouteSpy{menu: []venues.PublicMenuCategory{{ID: "category-1", Name: "Lunch", Items: []venues.PublicMenuItem{{ID: "item-1", Name: "Soup"}}}}}
+	handler := New(Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Venues: venueService})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/public/venues/venue-42/menu", nil))
+	if response.Code != http.StatusOK || venueService.venueID != "venue-42" || !strings.Contains(response.Body.String(), "Soup") {
+		t.Fatalf("public menu: status=%d venue=%q body=%s", response.Code, venueService.venueID, response.Body.String())
 	}
 }
 

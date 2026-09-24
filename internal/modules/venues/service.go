@@ -52,6 +52,24 @@ func (s *Service) GetPublished(ctx context.Context, venueID string) (PublicVenue
 	return s.repository.GetPublished(ctx, venueID)
 }
 
+func (s *Service) ListPublishedMenu(ctx context.Context, venueID string) ([]PublicMenuCategory, error) {
+	if !validVenueID(venueID) {
+		return nil, appfault.ErrInvalidInput
+	}
+	published, err := s.repository.IsPublished(ctx, venueID)
+	if err != nil {
+		return nil, err
+	}
+	if !published {
+		return nil, appfault.ErrNotFound
+	}
+	categories, err := s.repository.ListPublishedMenu(ctx, venueID)
+	if categories == nil && err == nil {
+		categories = []PublicMenuCategory{}
+	}
+	return categories, err
+}
+
 func (s *Service) IsPublished(ctx context.Context, venueID string) (bool, error) {
 	if !validVenueID(venueID) {
 		return false, appfault.ErrInvalidInput

@@ -221,6 +221,12 @@ Venue settings may define `public_category`, `public_filters`, `public_tags`,
 back to `restaurants`, so every newly published Vendor venue is discoverable.
 Published review aggregates supply `rating` and `review_count`.
 
+`GET /api/v1/public/venues/{venueID}/menu` returns the visible menu of a
+published venue as `{ "categories": [{ "id", "name", "items": [...] }] }`.
+It needs no session and includes only active categories and available,
+non-deleted items. Invalid venue IDs return 422; unpublished or missing venues
+return 404. Pocket Spots uses this read-only projection for venue menu search.
+
 ## Tests
 
 ```bash
