@@ -227,6 +227,11 @@ It needs no session and includes only active categories and available,
 non-deleted items. Invalid venue IDs return 422; unpublished or missing venues
 return 404. Pocket Spots uses this read-only projection for venue menu search.
 
+`GET /api/v1/public/venues/{venueID}/reviews` returns up to 50 most recent
+published reviews for an active venue. The public review view omits guest names,
+order IDs and table identifiers; the response contains only rating, body,
+owner reply and creation time.
+
 ## Tests
 
 ```bash

@@ -18,6 +18,7 @@ type venueRouteSpy struct {
 	venueID string
 	query   venues.PublicVenueQuery
 	menu    []venues.PublicMenuCategory
+	reviews []venues.PublicReview
 }
 
 func (s *venueRouteSpy) List(context.Context, string) ([]venues.Venue, error) {
@@ -34,6 +35,10 @@ func (s *venueRouteSpy) GetPublished(context.Context, string) (venues.PublicVenu
 func (s *venueRouteSpy) ListPublishedMenu(_ context.Context, venueID string) ([]venues.PublicMenuCategory, error) {
 	s.venueID = venueID
 	return s.menu, nil
+}
+func (s *venueRouteSpy) ListPublishedReviews(_ context.Context, venueID string) ([]venues.PublicReview, error) {
+	s.venueID = venueID
+	return s.reviews, nil
 }
 
 func (s *venueRouteSpy) Create(context.Context, string, venues.Input) (venues.Venue, error) {
@@ -66,6 +71,21 @@ func TestPublicVenueMenuIsAvailableWithoutAuthentication(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/public/venues/venue-42/menu", nil))
 	if response.Code != http.StatusOK || venueService.venueID != "venue-42" || !strings.Contains(response.Body.String(), "Soup") {
 		t.Fatalf("public menu: status=%d venue=%q body=%s", response.Code, venueService.venueID, response.Body.String())
+	}
+}
+
+func TestPublicVenueReviewsDoNotExposeOrderIdentity(t *testing.T) {
+	venueService := &venueRouteSpy{reviews: []venues.PublicReview{{ID: "review-1", Rating: 5, Body: "Great coffee"}}}
+	handler := New(Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Venues: venueService})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/public/venues/venue-42/reviews", nil))
+	if response.Code != http.StatusOK || venueService.venueID != "venue-42" || !strings.Contains(response.Body.String(), "Great coffee") {
+		t.Fatalf("public reviews: status=%d venue=%q body=%s", response.Code, venueService.venueID, response.Body.String())
+	}
+	for _, privateField := range []string{"guest_name", "order", "table"} {
+		if strings.Contains(response.Body.String(), privateField) {
+			t.Fatalf("public review exposed %s: %s", privateField, response.Body.String())
+		}
 	}
 }
 

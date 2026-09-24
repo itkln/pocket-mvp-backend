@@ -9,6 +9,7 @@ type repositorySpy struct {
 	query     PublicVenueQuery
 	published bool
 	menu      []PublicMenuCategory
+	reviews   []PublicReview
 }
 
 func (r *repositorySpy) List(context.Context, string) ([]Venue, error) { return nil, nil }
@@ -22,6 +23,9 @@ func (r *repositorySpy) GetPublished(context.Context, string) (PublicVenue, erro
 func (r *repositorySpy) IsPublished(context.Context, string) (bool, error) { return r.published, nil }
 func (r *repositorySpy) ListPublishedMenu(context.Context, string) ([]PublicMenuCategory, error) {
 	return r.menu, nil
+}
+func (r *repositorySpy) ListPublishedReviews(context.Context, string) ([]PublicReview, error) {
+	return r.reviews, nil
 }
 func (r *repositorySpy) Create(context.Context, string, string, Input) (Venue, error) {
 	return Venue{}, nil
@@ -87,5 +91,22 @@ func TestListPublishedMenuExcludesUnpublishedVenueAndNormalizesEmptyList(t *test
 	menu, err := service.ListPublishedMenu(context.Background(), id)
 	if err != nil || menu == nil || len(menu) != 0 {
 		t.Fatalf("unexpected empty menu: %#v, %v", menu, err)
+	}
+}
+
+func TestListPublishedReviewsExcludesUnpublishedVenueAndNormalizesEmptyList(t *testing.T) {
+	repository := &repositorySpy{}
+	service := NewService(repository)
+	id := "11111111-1111-4111-8111-111111111111"
+	if _, err := service.ListPublishedReviews(context.Background(), "invalid"); err == nil {
+		t.Fatal("invalid ID was accepted")
+	}
+	if _, err := service.ListPublishedReviews(context.Background(), id); err == nil {
+		t.Fatal("unpublished venue was accepted")
+	}
+	repository.published = true
+	reviews, err := service.ListPublishedReviews(context.Background(), id)
+	if err != nil || reviews == nil || len(reviews) != 0 {
+		t.Fatalf("unexpected empty reviews: %#v, %v", reviews, err)
 	}
 }

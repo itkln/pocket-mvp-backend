@@ -70,6 +70,24 @@ func (s *Service) ListPublishedMenu(ctx context.Context, venueID string) ([]Publ
 	return categories, err
 }
 
+func (s *Service) ListPublishedReviews(ctx context.Context, venueID string) ([]PublicReview, error) {
+	if !validVenueID(venueID) {
+		return nil, appfault.ErrInvalidInput
+	}
+	published, err := s.repository.IsPublished(ctx, venueID)
+	if err != nil {
+		return nil, err
+	}
+	if !published {
+		return nil, appfault.ErrNotFound
+	}
+	reviews, err := s.repository.ListPublishedReviews(ctx, venueID)
+	if reviews == nil && err == nil {
+		reviews = []PublicReview{}
+	}
+	return reviews, err
+}
+
 func (s *Service) IsPublished(ctx context.Context, venueID string) (bool, error) {
 	if !validVenueID(venueID) {
 		return false, appfault.ErrInvalidInput

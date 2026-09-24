@@ -20,6 +20,7 @@ func (api *API) routes() http.Handler {
 	router.Get("/api/v1/public/venues", api.searchPublicVenues)
 	router.Get("/api/v1/public/venues/{venueID}", api.getPublicVenue)
 	router.Get("/api/v1/public/venues/{venueID}/menu", api.getPublicVenueMenu)
+	router.Get("/api/v1/public/venues/{venueID}/reviews", api.getPublicVenueReviews)
 	router.Get("/api/v1/spots/me/saved-venues", api.listSavedVenues)
 	router.Put("/api/v1/spots/me/saved-venues/{venueID}", api.addSavedVenue)
 	router.Delete("/api/v1/spots/me/saved-venues/{venueID}", api.removeSavedVenue)

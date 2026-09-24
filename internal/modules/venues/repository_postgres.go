@@ -179,6 +179,31 @@ func (r *PostgresRepository) ListPublishedMenu(ctx context.Context, venueID stri
 	return categories, rows.Err()
 }
 
+func (r *PostgresRepository) ListPublishedReviews(ctx context.Context, venueID string) ([]PublicReview, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT r.id::text, r.rating, COALESCE(r.body, ''), COALESCE(r.owner_reply, ''), r.created_at
+		FROM reviews r
+		JOIN venues v ON v.id = r.venue_id
+		WHERE r.venue_id = $1 AND r.status = 'published'
+		  AND v.status = 'active' AND v.deleted_at IS NULL
+		ORDER BY r.created_at DESC, r.id DESC
+		LIMIT 50`, venueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	reviews := []PublicReview{}
+	for rows.Next() {
+		var review PublicReview
+		if err := rows.Scan(&review.ID, &review.Rating, &review.Body, &review.OwnerReply, &review.CreatedAt); err != nil {
+			return nil, err
+		}
+		reviews = append(reviews, review)
+	}
+	return reviews, rows.Err()
+}
+
 func (r *PostgresRepository) GetPublished(ctx context.Context, venueID string) (PublicVenue, error) {
 	row := r.db.QueryRow(ctx, `
 		SELECT v.id::text, v.slug, v.name, COALESCE(v.description, ''),

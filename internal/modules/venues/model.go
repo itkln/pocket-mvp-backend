@@ -92,3 +92,12 @@ type PublicMenuCategory struct {
 	Name  string           `json:"name"`
 	Items []PublicMenuItem `json:"items"`
 }
+
+// PublicReview omits order, table and guest identity from the public feed.
+type PublicReview struct {
+	ID         string    `json:"id"`
+	Rating     int       `json:"rating"`
+	Body       string    `json:"body,omitempty"`
+	OwnerReply string    `json:"owner_reply,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+}
