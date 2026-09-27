@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"pocket-mvp-backend/internal/buildinfo"
+	"pocket-mvp-backend/internal/modules/availability"
 	"pocket-mvp-backend/internal/modules/billing"
 	"pocket-mvp-backend/internal/modules/catalog"
 	"pocket-mvp-backend/internal/modules/feedback"
@@ -42,6 +43,10 @@ type VenueService interface {
 	Create(context.Context, string, venues.Input) (venues.Venue, error)
 	Update(context.Context, string, string, venues.Input) (venues.Venue, error)
 	Delete(context.Context, string, string) error
+}
+
+type AvailabilityService interface {
+	Get(context.Context, string, string, int) (availability.Result, error)
 }
 
 type FavoritesService interface {
@@ -102,6 +107,7 @@ type Dependencies struct {
 	Build          buildinfo.Info
 	Identity       IdentityService
 	Venues         VenueService
+	Availability   AvailabilityService
 	Favorites      FavoritesService
 	Catalog        CatalogService
 	Workforce      WorkforceService
@@ -122,6 +128,7 @@ type API struct {
 	startedAt      time.Time
 	identity       IdentityService
 	venues         VenueService
+	availability   AvailabilityService
 	favorites      FavoritesService
 	catalog        CatalogService
 	workforce      WorkforceService

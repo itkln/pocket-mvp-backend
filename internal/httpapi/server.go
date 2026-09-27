@@ -18,6 +18,7 @@ func New(deps Dependencies) http.Handler {
 		startedAt:      time.Now().UTC(),
 		identity:       deps.Identity,
 		venues:         deps.Venues,
+		availability:   deps.Availability,
 		favorites:      deps.Favorites,
 		catalog:        deps.Catalog,
 		workforce:      deps.Workforce,

@@ -10,8 +10,39 @@ import (
 	"strings"
 	"testing"
 
+	"pocket-mvp-backend/internal/modules/availability"
 	"pocket-mvp-backend/internal/modules/venues"
 )
+
+type availabilityRouteSpy struct {
+	venueID, date string
+	guests        int
+}
+
+func (s *availabilityRouteSpy) Get(_ context.Context, venueID, date string, guests int) (availability.Result, error) {
+	s.venueID, s.date, s.guests = venueID, date, guests
+	return availability.Result{VenueID: venueID, Date: date, Guests: guests, Slots: []availability.Slot{}}, nil
+}
+
+func TestPublicAvailabilityPassesSelectionWithoutAuthentication(t *testing.T) {
+	service := &availabilityRouteSpy{}
+	handler := New(Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Availability: service})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/public/venues/venue-42/availability?date=2026-10-03&guests=4", nil))
+	if response.Code != http.StatusOK || service.venueID != "venue-42" || service.date != "2026-10-03" || service.guests != 4 {
+		t.Fatalf("availability: status=%d service=%+v body=%s", response.Code, service, response.Body.String())
+	}
+	if response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("availability must not be cached")
+	}
+	for _, query := range []string{"guests=0", "guests=21", "guests=2&guests=3", "date=a&date=b"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/public/venues/venue-42/availability?"+query, nil))
+		if response.Code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: got %d", query, response.Code)
+		}
+	}
+}
 
 type venueRouteSpy struct {
 	ownerID string
