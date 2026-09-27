@@ -64,6 +64,7 @@ func (api *API) getPublicVenue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) getPublicVenueMenu(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	categories, err := api.venues.ListPublishedMenu(r.Context(), pathParam(r, "venueID"))
 	if err != nil {
 		switch {

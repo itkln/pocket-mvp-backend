@@ -72,6 +72,9 @@ func TestPublicVenueMenuIsAvailableWithoutAuthentication(t *testing.T) {
 	if response.Code != http.StatusOK || venueService.venueID != "venue-42" || !strings.Contains(response.Body.String(), "Soup") {
 		t.Fatalf("public menu: status=%d venue=%q body=%s", response.Code, venueService.venueID, response.Body.String())
 	}
+	if response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("public menu must not be cached: %q", response.Header().Get("Cache-Control"))
+	}
 }
 
 func TestPublicVenueReviewsDoNotExposeOrderIdentity(t *testing.T) {

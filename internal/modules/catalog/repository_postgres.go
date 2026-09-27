@@ -158,27 +158,58 @@ func (r *PostgresRepository) CreateMenuItem(ctx context.Context, venueID string,
 }
 
 func (r *PostgresRepository) UpdateMenuItem(ctx context.Context, venueID, itemID string, input MenuItemInput) (MenuItem, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return MenuItem{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var item MenuItem
-	err := r.db.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		UPDATE menu_items i
 		SET category_id = $3, name = $4, description = NULLIF($5, ''), price_minor = $6,
 		    currency = $7, is_available = $8, is_popular = $9, sort_order = $10
 		FROM menu_categories c
 		WHERE i.id = $2 AND i.venue_id = $1 AND c.id = $3 AND c.venue_id = $1 AND i.deleted_at IS NULL
 		RETURNING i.id::text, i.category_id::text, c.name, i.name, COALESCE(i.description, ''),
-		          i.price_minor, i.currency, i.is_available, i.is_popular, i.sort_order,
-		          COALESCE((SELECT public_url FROM menu_item_images WHERE menu_item_id = i.id ORDER BY sort_order LIMIT 1), '')`,
+		          i.price_minor, i.currency, i.is_available, i.is_popular, i.sort_order`,
 		venueID, itemID, input.CategoryID, input.Name, input.Description, input.PriceMinor,
 		input.Currency, boolValue(input.IsAvailable, true), input.IsPopular, input.SortOrder,
 	).Scan(
 		&item.ID, &item.CategoryID, &item.Category, &item.Name, &item.Description,
 		&item.PriceMinor, &item.Currency, &item.IsAvailable, &item.IsPopular,
-		&item.SortOrder, &item.ImageURL,
+		&item.SortOrder,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return MenuItem{}, appfault.ErrNotFound
 	}
-	return item, appfault.MapWriteError(err)
+	if err != nil {
+		return MenuItem{}, appfault.MapWriteError(err)
+	}
+
+	// The owner editor stores its image as an external URL (or a data URL).
+	// Keep the image and item update atomic so Spots never observes a mixed version.
+	if input.ImageURL == "" {
+		_, err = tx.Exec(ctx, `DELETE FROM menu_item_images WHERE menu_item_id = $1 AND storage_key = $2`, item.ID, "external/"+item.ID)
+	} else {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO menu_item_images (menu_item_id, storage_key, public_url, content_type, byte_size, sort_order)
+			VALUES ($1, $2, $3, 'image/external', 1, -1)
+			ON CONFLICT (storage_key) DO UPDATE SET public_url = EXCLUDED.public_url, sort_order = EXCLUDED.sort_order`,
+			item.ID, "external/"+item.ID, input.ImageURL)
+	}
+	if err != nil {
+		return MenuItem{}, appfault.MapWriteError(err)
+	}
+	if err = tx.QueryRow(ctx, `
+		SELECT COALESCE((SELECT public_url FROM menu_item_images
+		                 WHERE menu_item_id = $1 ORDER BY sort_order, id LIMIT 1), '')`, item.ID).Scan(&item.ImageURL); err != nil {
+		return MenuItem{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return MenuItem{}, err
+	}
+	return item, nil
 }
 
 func (r *PostgresRepository) DeleteMenuItem(ctx context.Context, venueID, itemID string) error {
