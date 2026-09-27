@@ -20,41 +20,8 @@ type Table struct {
 	ID         string     `json:"id"`
 	Identifier string     `json:"identifier"`
 	Seats      int        `json:"seats"`
-	LayoutID   string     `json:"-"`
-	Shape      string     `json:"-"`
-	X          float64    `json:"-"`
-	Y          float64    `json:"-"`
-	Width      float64    `json:"-"`
-	Height     float64    `json:"-"`
 	Status     string     `json:"-"`
 	Bookings   []Interval `json:"-"`
-}
-
-type FloorTable struct {
-	ID         string  `json:"id"`
-	Identifier string  `json:"identifier"`
-	Seats      int     `json:"seats"`
-	Shape      string  `json:"shape"`
-	X          float64 `json:"x"`
-	Y          float64 `json:"y"`
-	Width      float64 `json:"width"`
-	Height     float64 `json:"height"`
-}
-
-type Fixture struct {
-	ID       string  `json:"id"`
-	Type     string  `json:"type"`
-	X        float64 `json:"x"`
-	Y        float64 `json:"y"`
-	Rotation int     `json:"rotation"`
-	Size     float64 `json:"size"`
-}
-
-type Floor struct {
-	ID       string       `json:"id"`
-	Name     string       `json:"name"`
-	Tables   []FloorTable `json:"tables"`
-	Fixtures []Fixture    `json:"fixtures"`
 }
 
 type Interval struct{ Start, End time.Time }
@@ -73,18 +40,16 @@ type Slot struct {
 }
 
 type Result struct {
-	VenueID         string  `json:"venue_id"`
-	Date            string  `json:"date"`
-	Timezone        string  `json:"timezone"`
-	Guests          int     `json:"guests"`
-	DurationMinutes int     `json:"duration_minutes"`
-	Floors          []Floor `json:"floors"`
-	Slots           []Slot  `json:"slots"`
+	VenueID         string `json:"venue_id"`
+	Date            string `json:"date"`
+	Timezone        string `json:"timezone"`
+	Guests          int    `json:"guests"`
+	DurationMinutes int    `json:"duration_minutes"`
+	Slots           []Slot `json:"slots"`
 }
 
 type Repository interface {
 	GetVenue(context.Context, string) (Venue, error)
-	ListFloors(context.Context, string) ([]Floor, error)
 	ListTables(context.Context, string, time.Time, time.Time) ([]Table, error)
 }
 
@@ -121,12 +86,7 @@ func (s *Service) Get(ctx context.Context, venueID, date string, guests int) (Re
 	if selected.Before(today) || selected.After(today.AddDate(0, 0, bookingDays)) {
 		return Result{}, appfault.ErrInvalidInput
 	}
-	result := Result{VenueID: venueID, Date: date, Timezone: venue.Timezone, Guests: guests, DurationMinutes: int(duration.Minutes()), Floors: []Floor{}, Slots: []Slot{}}
-	floors, err := s.repository.ListFloors(ctx, venueID)
-	if err != nil {
-		return Result{}, err
-	}
-	result.Floors = floors
+	result := Result{VenueID: venueID, Date: date, Timezone: venue.Timezone, Guests: guests, DurationMinutes: int(duration.Minutes()), Slots: []Slot{}}
 	if !venue.ScheduleEnabled || (selected.Equal(today) && !venue.SameDayBooking) {
 		return result, nil
 	}
@@ -136,17 +96,6 @@ func (s *Service) Get(ctx context.Context, venueID, date string, guests int) (Re
 	tables, err := s.repository.ListTables(ctx, venueID, open, close)
 	if err != nil {
 		return Result{}, err
-	}
-	for _, table := range tables {
-		for index := range result.Floors {
-			if result.Floors[index].ID == table.LayoutID {
-				result.Floors[index].Tables = append(result.Floors[index].Tables, FloorTable{
-					ID: table.ID, Identifier: table.Identifier, Seats: table.Seats, Shape: table.Shape,
-					X: table.X, Y: table.Y, Width: table.Width, Height: table.Height,
-				})
-				break
-			}
-		}
 	}
 	for start := open; !start.Add(duration).After(close); start = start.Add(slotStep) {
 		end := start.Add(duration)

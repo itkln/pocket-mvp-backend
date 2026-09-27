@@ -13,12 +13,10 @@ const testVenueID = "11111111-1111-4111-8111-111111111111"
 
 type repositoryStub struct {
 	venue  Venue
-	floors []Floor
 	tables []Table
 }
 
-func (r repositoryStub) GetVenue(context.Context, string) (Venue, error)     { return r.venue, nil }
-func (r repositoryStub) ListFloors(context.Context, string) ([]Floor, error) { return r.floors, nil }
+func (r repositoryStub) GetVenue(context.Context, string) (Venue, error) { return r.venue, nil }
 func (r repositoryStub) ListTables(context.Context, string, time.Time, time.Time) ([]Table, error) {
 	return r.tables, nil
 }
@@ -30,14 +28,13 @@ func TestAvailabilityFiltersCapacityStateAndOverlaps(t *testing.T) {
 	}
 	booked := time.Date(2026, 10, 3, 10, 0, 0, 0, location)
 	service := NewService(repositoryStub{
-		venue:  Venue{Timezone: "Europe/Bratislava", ScheduleEnabled: true, SameDayBooking: true},
-		floors: []Floor{{ID: "main", Name: "Main", Tables: []FloorTable{}, Fixtures: []Fixture{}}},
+		venue: Venue{Timezone: "Europe/Bratislava", ScheduleEnabled: true, SameDayBooking: true},
 		tables: []Table{
-			{ID: "small", LayoutID: "main", Seats: 2, Status: "available"},
-			{ID: "disabled", LayoutID: "main", Seats: 6, Status: "disabled"},
-			{ID: "occupied-now", LayoutID: "main", Seats: 4, Status: "occupied"},
-			{ID: "booked", LayoutID: "main", Seats: 4, Status: "available", Bookings: []Interval{{Start: booked, End: booked.Add(2 * time.Hour)}}},
-			{ID: "free", LayoutID: "main", Seats: 4, Status: "available"},
+			{ID: "small", Seats: 2, Status: "available"},
+			{ID: "disabled", Seats: 6, Status: "disabled"},
+			{ID: "occupied-now", Seats: 4, Status: "occupied"},
+			{ID: "booked", Seats: 4, Status: "available", Bookings: []Interval{{Start: booked, End: booked.Add(2 * time.Hour)}}},
+			{ID: "free", Seats: 4, Status: "available"},
 		},
 	})
 	service.now = func() time.Time { return time.Date(2026, 10, 2, 12, 0, 0, 0, location) }
@@ -47,9 +44,6 @@ func TestAvailabilityFiltersCapacityStateAndOverlaps(t *testing.T) {
 	}
 	if result.Timezone != "Europe/Bratislava" || result.DurationMinutes != 120 || len(result.Slots) == 0 {
 		t.Fatalf("unexpected result: %+v", result)
-	}
-	if len(result.Floors) != 1 || len(result.Floors[0].Tables) != 5 {
-		t.Fatalf("the plan must include unavailable tables too: %+v", result.Floors)
 	}
 	for _, slot := range result.Slots {
 		if slot.Time == "12:00" && (len(slot.Tables) != 3 || slot.Tables[0].ID != "occupied-now") {

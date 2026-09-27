@@ -49,9 +49,6 @@ func TestPublicAvailabilityIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Floors) != 1 || len(result.Floors[0].Tables) != 2 || result.Floors[0].Tables[0].ID != tableID {
-		t.Fatalf("public plan must contain operational tables: %+v", result.Floors)
-	}
 	for _, slot := range result.Slots {
 		if slot.Time == "10:00" {
 			t.Fatal("overlapping reservation offered as available")
