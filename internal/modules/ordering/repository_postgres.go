@@ -27,9 +27,11 @@ func (r *PostgresRepository) List(ctx context.Context, venueID string) ([]Order,
 		         ELSE 'Онлайн'
 		       END,
 		       COALESCE(o.guest_name, ''), o.total_minor, o.currency, o.status,
-		       COALESCE(o.notes, ''), o.created_at
+		       COALESCE(o.notes, ''), o.created_at,
+		       COALESCE(r.reservation_code, ''), r.starts_at, COALESCE(r.guest_phone, ''), COALESCE(r.guest_count, 0)
 		FROM orders o
 		LEFT JOIN venue_tables t ON t.id = o.venue_table_id
+		LEFT JOIN reservations r ON r.id = o.reservation_id
 		WHERE o.venue_id = $1
 		ORDER BY o.created_at DESC
 		LIMIT 200`, venueID)
@@ -46,7 +48,33 @@ func (r *PostgresRepository) List(ctx context.Context, venueID string) ([]Order,
 		}
 		result = append(result, order)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	byID := make(map[string]int, len(result))
+	for index := range result {
+		byID[result[index].ID] = index
+	}
+	items, err := r.db.Query(ctx, `SELECT oi.order_id::text, oi.item_name, oi.quantity, oi.unit_price_minor
+		FROM order_items oi JOIN orders o ON o.id = oi.order_id
+		WHERE o.venue_id = $1 AND o.id IN (SELECT id FROM orders WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 200)
+		ORDER BY oi.created_at, oi.id`, venueID)
+	if err != nil {
+		return nil, err
+	}
+	defer items.Close()
+	for items.Next() {
+		var id string
+		var item OrderItem
+		if err := items.Scan(&id, &item.Name, &item.Quantity, &item.UnitPriceMinor); err != nil {
+			return nil, err
+		}
+		if index, ok := byID[id]; ok {
+			result[index].Items = append(result[index].Items, item)
+		}
+	}
+	return result, items.Err()
 }
 
 func (r *PostgresRepository) UpdateStatus(ctx context.Context, venueID, orderID, status string) (Order, error) {
@@ -83,6 +111,7 @@ func scanOrder(row orderScanner) (Order, error) {
 	err := row.Scan(
 		&order.ID, &order.Number, &order.Channel, &order.Source, &order.GuestName,
 		&order.TotalMinor, &order.Currency, &order.Status, &order.Notes, &order.CreatedAt,
+		&order.ReservationCode, &order.ReservationStartsAt, &order.GuestPhone, &order.GuestCount,
 	)
 	return order, err
 }

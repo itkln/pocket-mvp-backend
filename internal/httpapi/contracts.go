@@ -16,6 +16,7 @@ import (
 	"pocket-mvp-backend/internal/modules/identity"
 	"pocket-mvp-backend/internal/modules/ordering"
 	"pocket-mvp-backend/internal/modules/reporting"
+	"pocket-mvp-backend/internal/modules/reservations"
 	"pocket-mvp-backend/internal/modules/venues"
 	"pocket-mvp-backend/internal/modules/workforce"
 )
@@ -47,6 +48,10 @@ type VenueService interface {
 
 type AvailabilityService interface {
 	Get(context.Context, string, string, int) (availability.Result, error)
+}
+
+type ReservationService interface {
+	Create(context.Context, string, reservations.CreateInput) (reservations.Result, error)
 }
 
 type FavoritesService interface {
@@ -108,6 +113,7 @@ type Dependencies struct {
 	Identity       IdentityService
 	Venues         VenueService
 	Availability   AvailabilityService
+	Reservations   ReservationService
 	Favorites      FavoritesService
 	Catalog        CatalogService
 	Workforce      WorkforceService
@@ -129,6 +135,7 @@ type API struct {
 	identity       IdentityService
 	venues         VenueService
 	availability   AvailabilityService
+	reservations   ReservationService
 	favorites      FavoritesService
 	catalog        CatalogService
 	workforce      WorkforceService

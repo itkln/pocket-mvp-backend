@@ -19,6 +19,7 @@ func New(deps Dependencies) http.Handler {
 		identity:       deps.Identity,
 		venues:         deps.Venues,
 		availability:   deps.Availability,
+		reservations:   deps.Reservations,
 		favorites:      deps.Favorites,
 		catalog:        deps.Catalog,
 		workforce:      deps.Workforce,

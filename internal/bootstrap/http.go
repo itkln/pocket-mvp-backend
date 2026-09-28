@@ -19,6 +19,7 @@ import (
 	"pocket-mvp-backend/internal/modules/identity"
 	"pocket-mvp-backend/internal/modules/ordering"
 	"pocket-mvp-backend/internal/modules/reporting"
+	"pocket-mvp-backend/internal/modules/reservations"
 	"pocket-mvp-backend/internal/modules/venues"
 	"pocket-mvp-backend/internal/modules/workforce"
 	"pocket-mvp-backend/internal/notifications"
@@ -56,6 +57,8 @@ func NewHTTPHandler(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) (h
 		return nil, err
 	}
 	venueService := venues.NewService(venues.NewPostgresRepository(db))
+	availabilityRepository := availability.NewPostgresRepository(db)
+	availabilityService := availability.NewService(availabilityRepository)
 
 	return httpapi.New(httpapi.Dependencies{
 		Database:       db,
@@ -64,7 +67,8 @@ func NewHTTPHandler(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) (h
 		Build:          buildinfo.Current(),
 		Identity:       identityService,
 		Venues:         venueService,
-		Availability:   availability.NewService(availability.NewPostgresRepository(db)),
+		Availability:   availabilityService,
+		Reservations:   reservations.NewService(reservations.NewPostgresRepository(db), reservationAvailability{availabilityService, availabilityRepository}),
 		Favorites:      favorites.NewService(favorites.NewPostgresRepository(db), venueService),
 		Catalog:        catalog.NewService(catalog.NewPostgresRepository(db), venueAuthorizer),
 		Workforce:      workforce.NewService(workforce.NewPostgresRepository(db), venueAuthorizer),
