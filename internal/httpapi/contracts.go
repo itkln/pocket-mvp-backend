@@ -52,6 +52,9 @@ type AvailabilityService interface {
 
 type ReservationService interface {
 	Create(context.Context, string, reservations.CreateInput) (reservations.Result, error)
+	Hold(context.Context, string, reservations.CreateInput) (reservations.HoldResult, error)
+	Confirm(context.Context, string, string, reservations.CreateInput) (reservations.Result, error)
+	GetConfirmed(context.Context, string, string, string) (reservations.Result, error)
 }
 
 type FavoritesService interface {

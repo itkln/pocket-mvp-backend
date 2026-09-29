@@ -63,8 +63,9 @@ func TestPostgresImportsStayInRepositoryAdapters(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			name := filepath.Base(path)
 			if strings.HasPrefix(importPath, "github.com/jackc/pgx") &&
-				filepath.Base(path) != "repository_postgres.go" {
+				!(strings.HasPrefix(name, "repository_") && strings.HasSuffix(name, "_postgres.go")) {
 				t.Errorf("%s imports PostgreSQL outside a repository adapter", path)
 			}
 		}

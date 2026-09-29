@@ -75,7 +75,7 @@ func (api *API) cors(next http.Handler) http.Handler {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "origin_not_allowed"})
 				return
 			}
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Reservation-Key")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
 			w.WriteHeader(http.StatusNoContent)
 			return

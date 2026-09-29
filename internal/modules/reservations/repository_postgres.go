@@ -30,7 +30,7 @@ const byKeyQuery = `SELECT r.id::text, r.reservation_code, r.starts_at, r.guest_
 	COALESCE((SELECT sum(unit_price_minor * quantity) FROM reservation_preorder_items WHERE reservation_id = r.id), 0),
 	v.currency, r.request_hash
 	FROM reservations r JOIN venues v ON v.id = r.venue_id
-	WHERE r.venue_id = $1 AND r.idempotency_key = $2`
+	WHERE r.venue_id = $1 AND r.idempotency_key = $2 AND r.status = 'confirmed'`
 
 func (r *PostgresRepository) FindByKey(ctx context.Context, venueID, key string) (Result, string, bool, error) {
 	return scanByKey(r.db.QueryRow(ctx, byKeyQuery, venueID, key))

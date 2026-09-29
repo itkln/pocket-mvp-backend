@@ -37,7 +37,8 @@ func (r *PostgresRepository) ListTables(ctx context.Context, venueID string, ope
 		FROM venue_tables t
 		JOIN venue_layouts l ON l.id = t.layout_id AND l.is_active
 		LEFT JOIN reservations r ON r.venue_table_id = t.id
-		  AND r.status IN ('pending', 'confirmed', 'seated')
+		  AND (r.status IN ('confirmed', 'seated') OR
+		       (r.status = 'pending' AND (r.hold_expires_at IS NULL OR r.hold_expires_at > now())))
 		  AND r.starts_at < $3 AND r.ends_at > $2
 		WHERE t.venue_id = $1 AND t.deleted_at IS NULL
 		ORDER BY t.identifier, t.id, r.starts_at`, venueID, open, close)
