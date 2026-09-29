@@ -30,14 +30,14 @@ func (s *reservationRouteSpy) Create(_ context.Context, _ string, input reservat
 	return reservations.Result{ID: "booking-1", Code: "BOOK123", StartsAt: time.Now(), GuestCount: input.Guests}, nil
 }
 
-func TestPublicReservationUsesAccountContactsFromSession(t *testing.T) {
+func TestPublicReservationKeepsEnteredContactsForSignedInUser(t *testing.T) {
 	service := &reservationRouteSpy{}
 	handler := New(Dependencies{
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Identity: &reservationIdentity{},
 		Reservations: service, SessionCookie: "pocket_session",
 	})
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/public/venues/venue-1/reservations", strings.NewReader(`{
-		"starts_at":"2026-10-01T16:00:00Z","guests":2,"guest_name":"Forged","guest_email":"forged@example.test",
+		"starts_at":"2026-10-01T16:00:00Z","guests":2,"guest_name":"Other Guest","guest_email":"other@example.test",
 		"guest_phone":"+999999999","idempotency_key":"desktop-booking-test"
 	}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -47,9 +47,27 @@ func TestPublicReservationUsesAccountContactsFromSession(t *testing.T) {
 	if response.Code != http.StatusCreated {
 		t.Fatalf("booking response: %d %s", response.Code, response.Body.String())
 	}
-	if service.input.CustomerUserID != "10000000-0000-4000-8000-000000000001" || service.input.GuestName != "Account Guest" ||
-		service.input.GuestEmail != "account@example.test" || service.input.GuestPhone != "+421900123456" {
-		t.Fatalf("session did not override guest contacts: %+v", service.input)
+	if service.input.CustomerUserID != "10000000-0000-4000-8000-000000000001" || service.input.GuestName != "Other Guest" ||
+		service.input.GuestEmail != "other@example.test" || service.input.GuestPhone != "+999999999" {
+		t.Fatalf("entered booking contacts were not preserved: %+v", service.input)
+	}
+}
+
+func TestPublicReservationFallsBackToAccountContactsWhenOmitted(t *testing.T) {
+	service := &reservationRouteSpy{}
+	handler := New(Dependencies{
+		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Identity: &reservationIdentity{},
+		Reservations: service, SessionCookie: "pocket_session",
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/public/venues/venue-1/reservations", strings.NewReader(`{
+		"starts_at":"2026-10-01T16:00:00Z","guests":2,"idempotency_key":"desktop-booking-legacy"
+	}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-session"})
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated || service.input.GuestName != "Account Guest" || service.input.GuestEmail != "account@example.test" || service.input.GuestPhone != "+421900123456" {
+		t.Fatalf("account contact fallback: %d %+v", response.Code, service.input)
 	}
 }
 

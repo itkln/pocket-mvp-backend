@@ -22,9 +22,11 @@ func (api *API) createPublicReservation(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		input.CustomerUserID = user.ID
-		input.GuestName = strings.TrimSpace(user.FirstName + " " + user.LastName)
-		input.GuestEmail = user.Email
-		input.GuestPhone = user.Phone
+		if strings.TrimSpace(input.GuestName) == "" && strings.TrimSpace(input.GuestEmail) == "" && strings.TrimSpace(input.GuestPhone) == "" {
+			input.GuestName = strings.TrimSpace(user.FirstName + " " + user.LastName)
+			input.GuestEmail = user.Email
+			input.GuestPhone = user.Phone
+		}
 	}
 	result, err := api.reservations.Create(r.Context(), pathParam(r, "venueID"), input)
 	if err != nil {
