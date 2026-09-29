@@ -100,12 +100,12 @@ func (r *PostgresRepository) Create(ctx context.Context, venueID string, input C
 	}
 	var result Result
 	err = tx.QueryRow(ctx, `WITH new_id AS (SELECT gen_random_uuid() AS id)
-		INSERT INTO reservations (id, venue_id, venue_table_id, reservation_code, guest_name, guest_email, guest_phone,
+		INSERT INTO reservations (id, venue_id, venue_table_id, customer_user_id, reservation_code, guest_name, guest_email, guest_phone,
 			guest_count, starts_at, ends_at, status, notes, idempotency_key, request_hash)
-		SELECT id, $1, $2, upper(substr(replace(id::text, '-', ''), 1, 10)), $3, NULLIF($4, ''), $5,
-			$6, $7, $8, 'confirmed', NULLIF($9, ''), $10, $11 FROM new_id
+		SELECT id, $1, $2, NULLIF($3, '')::uuid, upper(substr(replace(id::text, '-', ''), 1, 10)), $4, NULLIF($5, ''), NULLIF($6, ''),
+			$7, $8, $9, 'confirmed', NULLIF($10, ''), $11, $12 FROM new_id
 		RETURNING id::text, reservation_code, starts_at, guest_count`,
-		venueID, slot.TableID, input.GuestName, input.GuestEmail, input.GuestPhone,
+		venueID, slot.TableID, input.CustomerUserID, input.GuestName, input.GuestEmail, input.GuestPhone,
 		input.Guests, slot.StartsAt, slot.EndsAt, input.Notes, input.IdempotencyKey, requestHash).
 		Scan(&result.ID, &result.Code, &result.StartsAt, &result.GuestCount)
 	if err != nil {

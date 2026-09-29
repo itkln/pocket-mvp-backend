@@ -107,4 +107,17 @@ func TestReservationPreorderIntegration(t *testing.T) {
 	if err := db.QueryRow(ctx, `SELECT count(*) FROM reservations WHERE venue_id = $1`, venueID).Scan(&count); err != nil || count != 1 {
 		t.Fatalf("unexpected reservation count: %d, %v", count, err)
 	}
+	accountBooking := reservations.CreateInput{
+		StartsAt: start.Add(3 * time.Hour), Guests: 2, CustomerUserID: ownerID,
+		GuestName: "Preorder Owner", GuestEmail: "preorder-owner@example.test", IdempotencyKey: "account-booking-test-1",
+	}
+	accountResult, err := booking.Create(ctx, venueID, accountBooking)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var linkedUserID, linkedEmail string
+	if err := db.QueryRow(ctx, `SELECT customer_user_id::text, guest_email FROM reservations WHERE id = $1`, accountResult.ID).
+		Scan(&linkedUserID, &linkedEmail); err != nil || linkedUserID != ownerID || linkedEmail != accountBooking.GuestEmail {
+		t.Fatalf("account booking link: %s, %s, %v", linkedUserID, linkedEmail, err)
+	}
 }

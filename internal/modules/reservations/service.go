@@ -26,6 +26,7 @@ type PreorderItem struct {
 type CreateInput struct {
 	StartsAt       time.Time      `json:"starts_at"`
 	Guests         int            `json:"guests"`
+	CustomerUserID string         `json:"-"`
 	GuestName      string         `json:"guest_name"`
 	GuestPhone     string         `json:"guest_phone"`
 	GuestEmail     string         `json:"guest_email"`
@@ -73,7 +74,8 @@ func (s *Service) Create(ctx context.Context, venueID string, input CreateInput)
 	input.GuestEmail = strings.TrimSpace(input.GuestEmail)
 	input.Notes = strings.TrimSpace(input.Notes)
 	if !uuidPattern.MatchString(venueID) || input.StartsAt.IsZero() || input.Guests < 1 || input.Guests > 20 || len(input.GuestName) < 2 || len(input.GuestName) > 120 ||
-		len(input.GuestPhone) < 5 || len(input.GuestPhone) > 40 || len(input.GuestEmail) > 254 || len(input.Notes) > 500 ||
+		(input.GuestPhone == "" && input.GuestEmail == "") || (input.GuestPhone != "" && len(input.GuestPhone) < 5) || len(input.GuestPhone) > 40 || len(input.GuestEmail) > 254 || len(input.Notes) > 500 ||
+		(input.CustomerUserID != "" && !uuidPattern.MatchString(input.CustomerUserID)) ||
 		len(input.Items) > 30 || len(input.IdempotencyKey) < 16 || len(input.IdempotencyKey) > 128 {
 		return Result{}, appfault.ErrInvalidInput
 	}
@@ -84,7 +86,14 @@ func (s *Service) Create(ctx context.Context, venueID string, input CreateInput)
 		}
 		seen[item.MenuItemID] = true
 	}
-	encoded, _ := json.Marshal(input)
+	var hashInput any = input
+	if input.CustomerUserID != "" {
+		hashInput = struct {
+			CreateInput
+			CustomerID string `json:"customer_user_id"`
+		}{input, input.CustomerUserID}
+	}
+	encoded, _ := json.Marshal(hashInput)
 	checksum := sha256.Sum256(encoded)
 	requestHash := hex.EncodeToString(checksum[:])
 	if existing, oldHash, found, err := s.repository.FindByKey(ctx, venueID, input.IdempotencyKey); err != nil {

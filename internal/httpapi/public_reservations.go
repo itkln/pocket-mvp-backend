@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/modules/reservations"
@@ -13,6 +14,17 @@ func (api *API) createPublicReservation(w http.ResponseWriter, r *http.Request) 
 	var input reservations.CreateInput
 	if !decodeOwnerJSON(w, r, &input) {
 		return
+	}
+	if cookie, err := r.Cookie(api.sessionCookie); err == nil {
+		user, err := api.identity.Authenticate(r.Context(), cookie.Value)
+		if err != nil {
+			writeAPIError(w, http.StatusUnauthorized, "unauthorized", "Sign in again to complete the booking.")
+			return
+		}
+		input.CustomerUserID = user.ID
+		input.GuestName = strings.TrimSpace(user.FirstName + " " + user.LastName)
+		input.GuestEmail = user.Email
+		input.GuestPhone = user.Phone
 	}
 	result, err := api.reservations.Create(r.Context(), pathParam(r, "venueID"), input)
 	if err != nil {
