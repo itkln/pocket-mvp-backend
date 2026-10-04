@@ -51,6 +51,7 @@ type AvailabilityService interface {
 }
 
 type ReservationService interface {
+	ListCustomer(context.Context, string) ([]reservations.CustomerReservation, error)
 	Create(context.Context, string, reservations.CreateInput) (reservations.Result, error)
 	Hold(context.Context, string, reservations.CreateInput) (reservations.HoldResult, error)
 	Confirm(context.Context, string, string, reservations.CreateInput) (reservations.Result, error)

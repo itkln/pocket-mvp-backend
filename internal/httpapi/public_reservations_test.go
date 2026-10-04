@@ -26,6 +26,7 @@ func (*reservationIdentity) Authenticate(context.Context, string) (identity.User
 type reservationRouteSpy struct {
 	input      reservations.CreateInput
 	confirmErr error
+	customerID string
 }
 
 func (s *reservationRouteSpy) Create(_ context.Context, _ string, input reservations.CreateInput) (reservations.Result, error) {
@@ -47,6 +48,34 @@ func (s *reservationRouteSpy) Confirm(_ context.Context, _, _ string, input rese
 
 func (s *reservationRouteSpy) GetConfirmed(context.Context, string, string, string) (reservations.Result, error) {
 	return reservations.Result{ID: "10000000-0000-4000-8000-000000000001", Code: "BOOK123"}, nil
+}
+
+func (s *reservationRouteSpy) ListCustomer(_ context.Context, customerID string) ([]reservations.CustomerReservation, error) {
+	s.customerID = customerID
+	return []reservations.CustomerReservation{{ID: "booking-1", Code: "BOOK123"}}, nil
+}
+
+func TestCustomerReservationsRequiresSessionAndUsesAccountOwnership(t *testing.T) {
+	service := &reservationRouteSpy{}
+	handler := New(Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Identity: &reservationIdentity{}, Reservations: service, SessionCookie: "pocket_session"})
+	for _, signedIn := range []bool{false, true} {
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/spots/me/reservations?customer_user_id=other-account", nil)
+		if signedIn {
+			request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-session"})
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if !signedIn {
+			if response.Code != http.StatusUnauthorized || service.customerID != "" {
+				t.Fatalf("anonymous: %d %s", response.Code, response.Body.String())
+			}
+		} else if response.Code != http.StatusOK || service.customerID != "10000000-0000-4000-8000-000000000001" || !strings.Contains(response.Body.String(), "BOOK123") {
+			t.Fatalf("account list: %d %s, customer %s", response.Code, response.Body.String(), service.customerID)
+		}
+		if response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatal("reservation data must not be cached")
+		}
+	}
 }
 
 func TestPublicReservationHoldConfirmAndReloadRoutes(t *testing.T) {

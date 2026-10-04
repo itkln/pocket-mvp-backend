@@ -62,6 +62,7 @@ type Availability interface {
 }
 
 type Repository interface {
+	ListCustomer(context.Context, string) ([]CustomerReservation, error)
 	FindByKey(context.Context, string, string) (Result, string, bool, error)
 	Create(context.Context, string, CreateInput, string, Slot) (Result, error)
 	Hold(context.Context, string, CreateInput, string, Slot) (HoldResult, error)

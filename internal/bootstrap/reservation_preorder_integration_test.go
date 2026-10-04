@@ -142,4 +142,50 @@ func TestReservationPreorderIntegration(t *testing.T) {
 		Scan(&linkedUserID, &linkedEmail); err != nil || linkedUserID != ownerID || linkedEmail != accountBooking.GuestEmail {
 		t.Fatalf("account booking link: %s, %s, %v", linkedUserID, linkedEmail, err)
 	}
+	// The account list includes ordinary bookings and saved preorder snapshots,
+	// while guest bookings, unfinished holds and other accounts remain invisible.
+	plainInput := reservations.CreateInput{StartsAt: start.Add(6 * time.Hour), Guests: 2, CustomerUserID: ownerID,
+		GuestName: "Another Guest", GuestPhone: "+421900111222", GuestEmail: "another@example.test", Notes: "Window seat", IdempotencyKey: "plain-account-booking"}
+	plain, err := booking.Create(ctx, venueID, plainInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pendingInput := plainInput
+	pendingInput.StartsAt = start.AddDate(0, 0, 1)
+	pendingInput.IdempotencyKey = "unfinished-account-hold"
+	pending, err := booking.Hold(ctx, venueID, pendingInput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, `UPDATE menu_items SET name = 'Changed pasta', price_minor = 9999 WHERE id = $1`, itemID); err != nil {
+		t.Fatal(err)
+	}
+	checkList := func() {
+		t.Helper()
+		list, err := booking.ListCustomer(ctx, ownerID)
+		if err != nil || len(list) != 2 {
+			t.Fatalf("own bookings: %+v, %v", list, err)
+		}
+		if list[0].ID != plain.ID || list[0].GuestName != plainInput.GuestName || list[0].GuestPhone != plainInput.GuestPhone ||
+			list[0].GuestEmail != plainInput.GuestEmail || list[0].Notes != plainInput.Notes || len(list[0].PreorderItems) != 0 || list[0].PreorderTotalMinor != 0 {
+			t.Fatalf("plain booking details: %+v", list[0])
+		}
+		entry := list[1]
+		if entry.ID != accountResult.ID || entry.Code != accountResult.Code || entry.Timezone != "Europe/Bratislava" ||
+			!entry.StartsAt.Equal(accountBooking.StartsAt) || entry.VenueName != "Preorder Test" || entry.GuestCount != 2 || entry.Status != "confirmed" ||
+			entry.PreorderOrderNumber != accountResult.PreorderOrderNumber || entry.PreorderTotalMinor != 1200 || entry.Currency != "EUR" ||
+			len(entry.PreorderItems) != 1 || entry.PreorderItems[0].Name != "Pasta" || entry.PreorderItems[0].UnitPriceMinor != 1200 || entry.PreorderItems[0].Quantity != 1 {
+			t.Fatalf("preorder details: %+v", entry)
+		}
+	}
+	checkList()
+	if _, err := db.Exec(ctx, `UPDATE reservations SET status = 'cancelled' WHERE id = $1`, pending.ID); err != nil {
+		t.Fatal(err)
+	}
+	checkList()
+	otherList, err := booking.ListCustomer(ctx, "10000000-0000-4000-8000-000000000099")
+	if err != nil || len(otherList) != 0 {
+		t.Fatalf("other account: %+v, %v", otherList, err)
+	}
+
 }

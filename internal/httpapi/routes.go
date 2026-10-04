@@ -30,6 +30,7 @@ func (api *API) routes() http.Handler {
 	router.Put("/api/v1/spots/me/saved-venues/{venueID}", api.addSavedVenue)
 	router.Delete("/api/v1/spots/me/saved-venues/{venueID}", api.removeSavedVenue)
 	router.Get("/api/v1/spots/me/preorders", api.listCustomerPreorders)
+	router.Get("/api/v1/spots/me/reservations", api.listCustomerReservations)
 
 	router.Route("/api/v1/auth", func(router chi.Router) {
 		router.Post("/register", api.register)
