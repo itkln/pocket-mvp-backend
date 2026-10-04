@@ -86,6 +86,10 @@ type WorkforceService interface {
 type OrderingService interface {
 	List(context.Context, string, string) ([]ordering.Order, error)
 	UpdateStatus(context.Context, string, string, string, string) (ordering.Order, error)
+	Quote(context.Context, string, ordering.CreateInput) (ordering.Quote, error)
+	Submit(context.Context, string, ordering.CreateInput) (ordering.Order, error)
+	ListCustomer(context.Context, string) ([]ordering.Order, error)
+	GetPublic(context.Context, string, string, string) (ordering.Order, error)
 }
 
 type FeedbackService interface {

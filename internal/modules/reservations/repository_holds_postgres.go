@@ -187,10 +187,10 @@ func (r *PostgresRepository) Confirm(ctx context.Context, venueID, holdID string
 	result.ID = holdID
 	if len(snapshots) > 0 {
 		var orderID string
-		err = tx.QueryRow(ctx, `INSERT INTO orders (venue_id, reservation_id, venue_table_id, channel, status, guest_name, guest_email,
+		err = tx.QueryRow(ctx, `INSERT INTO orders (venue_id, reservation_id, venue_table_id, customer_user_id, channel, status, guest_name, guest_email,
 			currency, subtotal_minor, total_minor, notes, idempotency_key, placed_at)
-			VALUES ($1, $2, $3, 'preorder', 'new', $4, NULLIF($5, ''), $6, $7, $7, NULLIF($8, ''), $9, now()) RETURNING id::text`,
-			venueID, holdID, tableID, input.GuestName, input.GuestEmail, result.Currency,
+			VALUES ($1, $2, $3, NULLIF($4, '')::uuid, 'preorder', 'new', $5, NULLIF($6, ''), $7, $8, $8, NULLIF($9, ''), $10, now()) RETURNING id::text`,
+			venueID, holdID, tableID, input.CustomerUserID, input.GuestName, input.GuestEmail, result.Currency,
 			result.PreorderTotalMinor, input.Notes, input.IdempotencyKey).Scan(&orderID)
 		if err != nil {
 			return Result{}, appfault.MapWriteError(err)
