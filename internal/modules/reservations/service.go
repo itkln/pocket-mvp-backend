@@ -37,12 +37,13 @@ type CreateInput struct {
 }
 
 type Result struct {
-	ID                 string    `json:"id"`
-	Code               string    `json:"code"`
-	StartsAt           time.Time `json:"starts_at"`
-	GuestCount         int       `json:"guest_count"`
-	PreorderTotalMinor int       `json:"preorder_total_minor"`
-	Currency           string    `json:"currency"`
+	ID                  string    `json:"id"`
+	Code                string    `json:"code"`
+	StartsAt            time.Time `json:"starts_at"`
+	GuestCount          int       `json:"guest_count"`
+	PreorderTotalMinor  int       `json:"preorder_total_minor"`
+	PreorderOrderNumber int64     `json:"preorder_order_number,omitempty"`
+	Currency            string    `json:"currency"`
 }
 
 type HoldResult struct {

@@ -20,9 +20,6 @@ func (api *API) routes() http.Handler {
 	router.Get("/api/v1/public/venues", api.searchPublicVenues)
 	router.Get("/api/v1/public/venues/{venueID}", api.getPublicVenue)
 	router.Get("/api/v1/public/venues/{venueID}/menu", api.getPublicVenueMenu)
-	router.Post("/api/v1/public/venues/{venueID}/orders/draft", api.quotePublicOrder)
-	router.Post("/api/v1/public/venues/{venueID}/orders", api.submitPublicOrder)
-	router.Get("/api/v1/public/venues/{venueID}/orders/{orderID}", api.getPublicOrder)
 	router.Get("/api/v1/public/venues/{venueID}/reviews", api.getPublicVenueReviews)
 	router.Get("/api/v1/public/venues/{venueID}/availability", api.getPublicVenueAvailability)
 	router.Post("/api/v1/public/venues/{venueID}/reservations", api.createPublicReservation)
@@ -30,9 +27,9 @@ func (api *API) routes() http.Handler {
 	router.Post("/api/v1/public/venues/{venueID}/reservations/{reservationID}/confirm", api.confirmPublicReservation)
 	router.Get("/api/v1/public/venues/{venueID}/reservations/{reservationID}", api.getPublicReservation)
 	router.Get("/api/v1/spots/me/saved-venues", api.listSavedVenues)
-	router.Get("/api/v1/spots/me/orders", api.listCustomerOrders)
 	router.Put("/api/v1/spots/me/saved-venues/{venueID}", api.addSavedVenue)
 	router.Delete("/api/v1/spots/me/saved-venues/{venueID}", api.removeSavedVenue)
+	router.Get("/api/v1/spots/me/preorders", api.listCustomerPreorders)
 
 	router.Route("/api/v1/auth", func(router chi.Router) {
 		router.Post("/register", api.register)

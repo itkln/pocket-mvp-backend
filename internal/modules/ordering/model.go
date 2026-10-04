@@ -22,30 +22,7 @@ type Order struct {
 }
 
 type OrderItem struct {
-	MenuItemID     string `json:"menu_item_id,omitempty"`
 	Name           string `json:"name"`
 	Quantity       int    `json:"quantity"`
 	UnitPriceMinor int    `json:"unit_price_minor"`
-	TotalMinor     int    `json:"total_minor"`
-}
-
-type CreateItem struct {
-	MenuItemID         string `json:"menu_item_id"`
-	Quantity           int    `json:"quantity"`
-	ExpectedPriceMinor int    `json:"expected_price_minor"`
-}
-
-type CreateInput struct {
-	CustomerUserID string       `json:"-"`
-	GuestName      string       `json:"guest_name"`
-	GuestEmail     string       `json:"guest_email"`
-	Notes          string       `json:"notes"`
-	Items          []CreateItem `json:"items"`
-	IdempotencyKey string       `json:"idempotency_key"`
-}
-
-type Quote struct {
-	Currency   string      `json:"currency"`
-	TotalMinor int         `json:"total_minor"`
-	Items      []OrderItem `json:"items"`
 }

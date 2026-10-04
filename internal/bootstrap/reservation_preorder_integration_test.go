@@ -85,11 +85,11 @@ func TestReservationPreorderIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.ID == "" || created.PreorderTotalMinor != 2400 {
+	if created.ID == "" || created.PreorderTotalMinor != 2400 || created.PreorderOrderNumber == 0 {
 		t.Fatalf("unexpected reservation: %+v", created)
 	}
 	replayed, err := booking.Create(ctx, venueID, input)
-	if err != nil || replayed.ID != created.ID {
+	if err != nil || replayed.ID != created.ID || replayed.PreorderOrderNumber != created.PreorderOrderNumber {
 		t.Fatalf("idempotent retry: %+v, %v", replayed, err)
 	}
 	if err := db.QueryRow(ctx, `SELECT count(*) FROM reservation_preorder_items WHERE reservation_id = $1 AND item_name = 'Pasta' AND unit_price_minor = 1200 AND quantity = 2`, created.ID).Scan(&count); err != nil || count != 1 {
@@ -110,10 +110,32 @@ func TestReservationPreorderIntegration(t *testing.T) {
 	accountBooking := reservations.CreateInput{
 		StartsAt: start.Add(3 * time.Hour), Guests: 2, CustomerUserID: ownerID,
 		GuestName: "Preorder Owner", GuestEmail: "preorder-owner@example.test", IdempotencyKey: "account-booking-test-1",
+		Items: []reservations.PreorderItem{{MenuItemID: itemID, Quantity: 1, ExpectedPriceMinor: 1200}},
 	}
-	accountResult, err := booking.Create(ctx, venueID, accountBooking)
+	hold, err := booking.Hold(ctx, venueID, accountBooking)
 	if err != nil {
 		t.Fatal(err)
+	}
+	accountResult, err := booking.Confirm(ctx, venueID, hold.ID, accountBooking)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accountResult.PreorderOrderNumber == 0 || accountResult.PreorderTotalMinor != 1200 {
+		t.Fatalf("account preorder confirmation: %+v", accountResult)
+	}
+	reloaded, err := booking.GetConfirmed(ctx, venueID, accountResult.ID, accountBooking.IdempotencyKey)
+	if err != nil || reloaded.PreorderOrderNumber != accountResult.PreorderOrderNumber {
+		t.Fatalf("reloaded preorder number: %+v, %v", reloaded, err)
+	}
+	replayedAccount, err := booking.Confirm(ctx, venueID, hold.ID, accountBooking)
+	if err != nil || replayedAccount.PreorderOrderNumber != accountResult.PreorderOrderNumber {
+		t.Fatalf("idempotent preorder confirmation: %+v, %v", replayedAccount, err)
+	}
+	preorders, err := ordering.NewPostgresRepository(db).ListCustomerPreorders(ctx, ownerID)
+	if err != nil || len(preorders) != 1 || preorders[0].Number != accountResult.PreorderOrderNumber ||
+		preorders[0].VenueName != "Preorder Test" || preorders[0].ReservationCode != accountResult.Code ||
+		len(preorders[0].Items) != 1 || preorders[0].Items[0].Name != "Pasta" {
+		t.Fatalf("account preorder history: %+v, %v", preorders, err)
 	}
 	var linkedUserID, linkedEmail string
 	if err := db.QueryRow(ctx, `SELECT customer_user_id::text, guest_email FROM reservations WHERE id = $1`, accountResult.ID).

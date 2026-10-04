@@ -19,7 +19,7 @@ type rowScanner interface{ Scan(...any) error }
 func scanByKey(row rowScanner) (Result, string, bool, error) {
 	var result Result
 	var hash string
-	err := row.Scan(&result.ID, &result.Code, &result.StartsAt, &result.GuestCount, &result.PreorderTotalMinor, &result.Currency, &hash)
+	err := row.Scan(&result.ID, &result.Code, &result.StartsAt, &result.GuestCount, &result.PreorderTotalMinor, &result.PreorderOrderNumber, &result.Currency, &hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Result{}, "", false, nil
 	}
@@ -28,6 +28,7 @@ func scanByKey(row rowScanner) (Result, string, bool, error) {
 
 const byKeyQuery = `SELECT r.id::text, r.reservation_code, r.starts_at, r.guest_count,
 	COALESCE((SELECT sum(unit_price_minor * quantity) FROM reservation_preorder_items WHERE reservation_id = r.id), 0),
+	COALESCE((SELECT order_number FROM orders WHERE reservation_id = r.id AND channel = 'preorder' LIMIT 1), 0),
 	v.currency, r.request_hash
 	FROM reservations r JOIN venues v ON v.id = r.venue_id
 	WHERE r.venue_id = $1 AND r.idempotency_key = $2 AND r.status = 'confirmed'`
@@ -118,10 +119,11 @@ func (r *PostgresRepository) Create(ctx context.Context, venueID string, input C
 	result.PreorderTotalMinor, result.Currency = total, currency
 	if len(snapshots) > 0 {
 		var orderID string
-		err = tx.QueryRow(ctx, `INSERT INTO orders (venue_id, reservation_id, venue_table_id, channel, status, guest_name, guest_email,
+		err = tx.QueryRow(ctx, `INSERT INTO orders (venue_id, reservation_id, venue_table_id, customer_user_id, channel, status, guest_name, guest_email,
 			currency, subtotal_minor, total_minor, notes, idempotency_key, placed_at)
-			VALUES ($1, $2, $3, 'preorder', 'new', $4, NULLIF($5, ''), $6, $7, $7, NULLIF($8, ''), $9, now()) RETURNING id::text`,
-			venueID, result.ID, slot.TableID, input.GuestName, input.GuestEmail, currency, total, input.Notes, input.IdempotencyKey).Scan(&orderID)
+			VALUES ($1, $2, $3, NULLIF($4, '')::uuid, 'preorder', 'new', $5, NULLIF($6, ''), $7, $8, $8, NULLIF($9, ''), $10, now()) RETURNING id::text, order_number`,
+			venueID, result.ID, slot.TableID, input.CustomerUserID, input.GuestName, input.GuestEmail, currency, total, input.Notes, input.IdempotencyKey).
+			Scan(&orderID, &result.PreorderOrderNumber)
 		if err != nil {
 			return Result{}, appfault.MapWriteError(err)
 		}

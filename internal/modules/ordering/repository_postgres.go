@@ -56,7 +56,7 @@ func (r *PostgresRepository) List(ctx context.Context, venueID string) ([]Order,
 	for index := range result {
 		byID[result[index].ID] = index
 	}
-	items, err := r.db.Query(ctx, `SELECT oi.order_id::text, COALESCE(oi.menu_item_id::text, ''), oi.item_name, oi.quantity, oi.unit_price_minor, oi.total_minor
+	items, err := r.db.Query(ctx, `SELECT oi.order_id::text, oi.item_name, oi.quantity, oi.unit_price_minor
 		FROM order_items oi JOIN orders o ON o.id = oi.order_id
 		WHERE o.venue_id = $1 AND o.id IN (SELECT id FROM orders WHERE venue_id = $1 ORDER BY created_at DESC LIMIT 200)
 		ORDER BY oi.created_at, oi.id`, venueID)
@@ -67,7 +67,7 @@ func (r *PostgresRepository) List(ctx context.Context, venueID string) ([]Order,
 	for items.Next() {
 		var id string
 		var item OrderItem
-		if err := items.Scan(&id, &item.MenuItemID, &item.Name, &item.Quantity, &item.UnitPriceMinor, &item.TotalMinor); err != nil {
+		if err := items.Scan(&id, &item.Name, &item.Quantity, &item.UnitPriceMinor); err != nil {
 			return nil, err
 		}
 		if index, ok := byID[id]; ok {
