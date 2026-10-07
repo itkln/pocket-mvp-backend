@@ -151,7 +151,8 @@ func (r *PostgresRepository) ListPublishedMenu(ctx context.Context, venueID stri
 		SELECT c.id::text, c.name, i.id::text, i.name, COALESCE(i.description, ''),
 		       i.price_minor, i.currency,
 		       COALESCE((SELECT public_url FROM menu_item_images
-		                 WHERE menu_item_id = i.id ORDER BY sort_order, id LIMIT 1), '')
+		                 WHERE menu_item_id = i.id ORDER BY sort_order, id LIMIT 1), ''),
+               i.portion_weight_g, i.energy_kcal, i.protein_g, i.fat_g, i.carbs_g
 		FROM menu_categories c
 		JOIN menu_items i ON i.category_id = c.id AND i.venue_id = c.venue_id
 		JOIN venues v ON v.id = c.venue_id
@@ -168,7 +169,8 @@ func (r *PostgresRepository) ListPublishedMenu(ctx context.Context, venueID stri
 		var categoryID, categoryName string
 		var item PublicMenuItem
 		if err := rows.Scan(&categoryID, &categoryName, &item.ID, &item.Name,
-			&item.Description, &item.PriceMinor, &item.Currency, &item.ImageURL); err != nil {
+			&item.Description, &item.PriceMinor, &item.Currency, &item.ImageURL,
+			&item.PortionWeightG, &item.EnergyKcal, &item.ProteinG, &item.FatG, &item.CarbsG); err != nil {
 			return nil, err
 		}
 		if len(categories) == 0 || categories[len(categories)-1].ID != categoryID {

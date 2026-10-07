@@ -36,11 +36,16 @@ func TestPublicMenuIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	available := true
+	weight, energy, protein, fat, carbs := 250, 196.5, 8.25, 0.0, 28.0
 	base := catalog.MenuItemInput{CategoryID: first.ID, Name: "Soup", Description: "Tomato", PriceMinor: 750,
-		Currency: "eur", IsAvailable: &available, SortOrder: 2, ImageURL: "https://example.test/old.jpg"}
+		Currency: "eur", IsAvailable: &available, SortOrder: 2, ImageURL: "https://example.test/old.jpg",
+		PortionWeightG: &weight, EnergyKcal: &energy, ProteinG: &protein, FatG: &fat, CarbsG: &carbs}
 	item, err := owner.CreateMenuItem(ctx, ownerID, venueID, base)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if item.PortionWeightG == nil || *item.PortionWeightG != weight || item.FatG == nil || *item.FatG != 0 {
+		t.Fatalf("Vendor create lost nutrition/zero: %+v", item)
 	}
 	base.Name, base.SortOrder, base.PriceMinor, base.ImageURL = "Salad", 1, 990, ""
 	earlier, err := owner.CreateMenuItem(ctx, ownerID, venueID, base)
@@ -63,10 +68,21 @@ func TestPublicMenuIntegration(t *testing.T) {
 	if got := menu[0].Items[1]; got.PriceMinor != 750 || got.Currency != "EUR" || got.ImageURL != "https://example.test/old.jpg" {
 		t.Fatalf("public item differs from Vendor: %+v", got)
 	}
+	if got := menu[0].Items[1]; got.PortionWeightG == nil || *got.PortionWeightG != weight ||
+		got.EnergyKcal == nil || *got.EnergyKcal != energy || got.ProteinG == nil || *got.ProteinG != protein ||
+		got.FatG == nil || *got.FatG != 0 || got.CarbsG == nil || *got.CarbsG != carbs {
+		t.Fatalf("public nutrition differs from Vendor: %+v", got)
+	}
+	owned, err := owner.ListMenuItems(ctx, ownerID, venueID)
+	if err != nil || len(owned) != 3 || owned[1].EnergyKcal == nil || *owned[1].EnergyKcal != energy {
+		t.Fatalf("Vendor list lost nutrition: %+v, %v", owned, err)
+	}
 
+	energy = 200
 	base = catalog.MenuItemInput{CategoryID: first.ID, Name: "Soup", Description: "Updated",
 		PriceMinor: 825, Currency: "usd", IsAvailable: &available, SortOrder: 2,
-		ImageURL: "https://example.test/new.jpg"}
+		ImageURL: "https://example.test/new.jpg", PortionWeightG: &weight, EnergyKcal: &energy,
+		ProteinG: &protein, FatG: &fat, CarbsG: &carbs}
 	updated, err := owner.UpdateMenuItem(ctx, ownerID, venueID, item.ID, base)
 	if err != nil {
 		t.Fatal(err)
@@ -77,17 +93,21 @@ func TestPublicMenuIntegration(t *testing.T) {
 	}
 	if got := menu[0].Items[1]; got.ID != item.ID || got.Description != "Updated" ||
 		got.PriceMinor != 825 || got.Currency != "USD" || got.ImageURL != updated.ImageURL ||
-		got.ImageURL != "https://example.test/new.jpg" {
+		got.ImageURL != "https://example.test/new.jpg" || got.EnergyKcal == nil || *got.EnergyKcal != 200 {
 		t.Fatalf("Vendor update not reflected in Spots: %+v", got)
 	}
 
 	base.ImageURL = ""
+	base.PortionWeightG, base.EnergyKcal, base.ProteinG, base.FatG, base.CarbsG = nil, nil, nil, nil, nil
 	if _, err := owner.UpdateMenuItem(ctx, ownerID, venueID, item.ID, base); err != nil {
 		t.Fatal(err)
 	}
 	menu, err = spots.ListPublishedMenu(ctx, venueID)
 	if err != nil || len(menu) != 2 || len(menu[0].Items) != 2 || menu[0].Items[1].ImageURL != "" {
 		t.Fatalf("removed image still public: %+v, %v", menu, err)
+	}
+	if got := menu[0].Items[1]; got.PortionWeightG != nil || got.EnergyKcal != nil || got.ProteinG != nil || got.FatG != nil || got.CarbsG != nil {
+		t.Fatalf("cleared nutrition still public: %+v", got)
 	}
 	available = false
 	if _, err := owner.UpdateMenuItem(ctx, ownerID, venueID, item.ID, base); err != nil {

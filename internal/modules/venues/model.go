@@ -79,12 +79,17 @@ type PublicVenuePage struct {
 
 // PublicMenu exposes only visible, available items of a published venue.
 type PublicMenuItem struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	PriceMinor  int    `json:"price_minor"`
-	Currency    string `json:"currency"`
-	ImageURL    string `json:"image_url,omitempty"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description,omitempty"`
+	PriceMinor     int      `json:"price_minor"`
+	Currency       string   `json:"currency"`
+	ImageURL       string   `json:"image_url,omitempty"`
+	PortionWeightG *int     `json:"portion_weight_g,omitempty"`
+	EnergyKcal     *float64 `json:"energy_kcal,omitempty"`
+	ProteinG       *float64 `json:"protein_g,omitempty"`
+	FatG           *float64 `json:"fat_g,omitempty"`
+	CarbsG         *float64 `json:"carbs_g,omitempty"`
 }
 
 type PublicMenuCategory struct {

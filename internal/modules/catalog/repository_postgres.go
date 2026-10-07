@@ -14,7 +14,8 @@ import (
 const menuItemSelect = `
 	SELECT i.id::text, i.category_id::text, c.name, i.name, COALESCE(i.description, ''),
 	       i.price_minor, i.currency, i.is_available, i.is_popular, i.sort_order,
-	       COALESCE((SELECT public_url FROM menu_item_images WHERE menu_item_id = i.id ORDER BY sort_order LIMIT 1), '')
+	       COALESCE((SELECT public_url FROM menu_item_images WHERE menu_item_id = i.id ORDER BY sort_order LIMIT 1), ''),
+           i.portion_weight_g, i.energy_kcal, i.protein_g, i.fat_g, i.carbs_g
 	FROM menu_items i
 	JOIN menu_categories c ON c.id = i.category_id`
 
@@ -119,21 +120,23 @@ func (r *PostgresRepository) CreateMenuItem(ctx context.Context, venueID string,
 	err = tx.QueryRow(ctx, `
 		INSERT INTO menu_items (
 			venue_id, category_id, name, description, price_minor, currency,
-			is_available, is_popular, sort_order
+			is_available, is_popular, sort_order, portion_weight_g, energy_kcal, protein_g, fat_g, carbs_g
 		)
-		SELECT $1, c.id, $3, NULLIF($4, ''), $5, $6, $7, $8, $9
+		SELECT $1, c.id, $3, NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
 		FROM menu_categories c
 		WHERE c.id = $2 AND c.venue_id = $1
 		RETURNING id::text, category_id::text,
 		          (SELECT name FROM menu_categories WHERE id = category_id),
 		          name, COALESCE(description, ''), price_minor, currency,
-		          is_available, is_popular, sort_order, ''`,
+		          is_available, is_popular, sort_order, '', portion_weight_g, energy_kcal, protein_g, fat_g, carbs_g`,
 		venueID, input.CategoryID, input.Name, input.Description, input.PriceMinor,
 		input.Currency, boolValue(input.IsAvailable, true), input.IsPopular, input.SortOrder,
+		input.PortionWeightG, input.EnergyKcal, input.ProteinG, input.FatG, input.CarbsG,
 	).Scan(
 		&item.ID, &item.CategoryID, &item.Category, &item.Name, &item.Description,
 		&item.PriceMinor, &item.Currency, &item.IsAvailable, &item.IsPopular,
 		&item.SortOrder, &item.ImageURL,
+		&item.PortionWeightG, &item.EnergyKcal, &item.ProteinG, &item.FatG, &item.CarbsG,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return MenuItem{}, appfault.ErrInvalidInput
@@ -168,17 +171,21 @@ func (r *PostgresRepository) UpdateMenuItem(ctx context.Context, venueID, itemID
 	err = tx.QueryRow(ctx, `
 		UPDATE menu_items i
 		SET category_id = $3, name = $4, description = NULLIF($5, ''), price_minor = $6,
-		    currency = $7, is_available = $8, is_popular = $9, sort_order = $10
+		    currency = $7, is_available = $8, is_popular = $9, sort_order = $10,
+            portion_weight_g = $11, energy_kcal = $12, protein_g = $13, fat_g = $14, carbs_g = $15
 		FROM menu_categories c
 		WHERE i.id = $2 AND i.venue_id = $1 AND c.id = $3 AND c.venue_id = $1 AND i.deleted_at IS NULL
 		RETURNING i.id::text, i.category_id::text, c.name, i.name, COALESCE(i.description, ''),
-		          i.price_minor, i.currency, i.is_available, i.is_popular, i.sort_order`,
+		          i.price_minor, i.currency, i.is_available, i.is_popular, i.sort_order,
+                  i.portion_weight_g, i.energy_kcal, i.protein_g, i.fat_g, i.carbs_g`,
 		venueID, itemID, input.CategoryID, input.Name, input.Description, input.PriceMinor,
 		input.Currency, boolValue(input.IsAvailable, true), input.IsPopular, input.SortOrder,
+		input.PortionWeightG, input.EnergyKcal, input.ProteinG, input.FatG, input.CarbsG,
 	).Scan(
 		&item.ID, &item.CategoryID, &item.Category, &item.Name, &item.Description,
 		&item.PriceMinor, &item.Currency, &item.IsAvailable, &item.IsPopular,
 		&item.SortOrder,
+		&item.PortionWeightG, &item.EnergyKcal, &item.ProteinG, &item.FatG, &item.CarbsG,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return MenuItem{}, appfault.ErrNotFound
@@ -273,6 +280,7 @@ func scanMenuItem(row menuItemScanner) (MenuItem, error) {
 		&item.ID, &item.CategoryID, &item.Category, &item.Name, &item.Description,
 		&item.PriceMinor, &item.Currency, &item.IsAvailable, &item.IsPopular,
 		&item.SortOrder, &item.ImageURL,
+		&item.PortionWeightG, &item.EnergyKcal, &item.ProteinG, &item.FatG, &item.CarbsG,
 	)
 	return item, err
 }
