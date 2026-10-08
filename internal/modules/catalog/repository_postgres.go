@@ -29,7 +29,7 @@ func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository {
 
 func (r *PostgresRepository) ListCategories(ctx context.Context, venueID string) ([]Category, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT c.id::text, c.name, c.sort_order, c.is_active, COUNT(i.id)
+		SELECT c.id::text, c.name, c.sort_order, c.is_active, c.preorder_enabled, COUNT(i.id)
 		FROM menu_categories c
 		LEFT JOIN menu_items i ON i.category_id = c.id AND i.deleted_at IS NULL
 		WHERE c.venue_id = $1
@@ -43,7 +43,7 @@ func (r *PostgresRepository) ListCategories(ctx context.Context, venueID string)
 	result := []Category{}
 	for rows.Next() {
 		var category Category
-		if err := rows.Scan(&category.ID, &category.Name, &category.SortOrder, &category.IsActive, &category.ItemCount); err != nil {
+		if err := rows.Scan(&category.ID, &category.Name, &category.SortOrder, &category.IsActive, &category.PreorderEnabled, &category.ItemCount); err != nil {
 			return nil, err
 		}
 		result = append(result, category)
@@ -54,11 +54,11 @@ func (r *PostgresRepository) ListCategories(ctx context.Context, venueID string)
 func (r *PostgresRepository) CreateCategory(ctx context.Context, venueID string, input CategoryInput) (Category, error) {
 	var category Category
 	err := r.db.QueryRow(ctx, `
-		INSERT INTO menu_categories (venue_id, name, sort_order, is_active)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id::text, name, sort_order, is_active, 0`,
-		venueID, input.Name, input.SortOrder, boolValue(input.IsActive, true),
-	).Scan(&category.ID, &category.Name, &category.SortOrder, &category.IsActive, &category.ItemCount)
+		INSERT INTO menu_categories (venue_id, name, sort_order, is_active, preorder_enabled)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id::text, name, sort_order, is_active, preorder_enabled, 0`,
+		venueID, input.Name, input.SortOrder, boolValue(input.IsActive, true), boolValue(input.PreorderEnabled, true),
+	).Scan(&category.ID, &category.Name, &category.SortOrder, &category.IsActive, &category.PreorderEnabled, &category.ItemCount)
 	return category, appfault.MapWriteError(err)
 }
 
@@ -66,12 +66,12 @@ func (r *PostgresRepository) UpdateCategory(ctx context.Context, venueID, catego
 	var category Category
 	err := r.db.QueryRow(ctx, `
 		UPDATE menu_categories
-		SET name = $3, sort_order = $4, is_active = $5
+		SET name = $3, sort_order = $4, is_active = $5, preorder_enabled = COALESCE($6::boolean, preorder_enabled)
 		WHERE id = $2 AND venue_id = $1
-		RETURNING id::text, name, sort_order, is_active,
+		RETURNING id::text, name, sort_order, is_active, preorder_enabled,
 		          (SELECT COUNT(*) FROM menu_items WHERE category_id = $2 AND deleted_at IS NULL)`,
-		venueID, categoryID, input.Name, input.SortOrder, boolValue(input.IsActive, true),
-	).Scan(&category.ID, &category.Name, &category.SortOrder, &category.IsActive, &category.ItemCount)
+		venueID, categoryID, input.Name, input.SortOrder, boolValue(input.IsActive, true), input.PreorderEnabled,
+	).Scan(&category.ID, &category.Name, &category.SortOrder, &category.IsActive, &category.PreorderEnabled, &category.ItemCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Category{}, appfault.ErrNotFound
 	}

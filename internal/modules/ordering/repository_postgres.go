@@ -78,28 +78,40 @@ func (r *PostgresRepository) List(ctx context.Context, venueID string) ([]Order,
 }
 
 func (r *PostgresRepository) UpdateStatus(ctx context.Context, venueID, orderID, status string) (Order, error) {
-	var order Order
-	err := r.db.QueryRow(ctx, `
-		UPDATE orders o
-		SET status = $3,
-		    completed_at = CASE WHEN $3 IN ('completed', 'cancelled') THEN now() ELSE completed_at END
-		WHERE o.id = $2 AND o.venue_id = $1
-		RETURNING o.id::text, o.order_number, o.channel,
-		          CASE
-		            WHEN o.venue_table_id IS NOT NULL THEN 'Стол ' || COALESCE((SELECT identifier FROM venue_tables WHERE id = o.venue_table_id), '')
-		            WHEN o.channel = 'pickup' THEN 'Самовывоз'
-		            ELSE 'Онлайн'
-		          END,
-		          COALESCE(o.guest_name, ''), o.total_minor, o.currency, o.status,
-		          COALESCE(o.notes, ''), o.created_at`, venueID, orderID, status,
-	).Scan(
-		&order.ID, &order.Number, &order.Channel, &order.Source, &order.GuestName,
-		&order.TotalMinor, &order.Currency, &order.Status, &order.Notes, &order.CreatedAt,
-	)
+	order, err := scanOrder(r.db.QueryRow(ctx, `
+		WITH updated AS (
+			UPDATE orders SET status = $3,
+				completed_at = CASE WHEN $3 IN ('completed', 'cancelled') THEN now() ELSE completed_at END
+			WHERE id = $2 AND venue_id = $1 RETURNING *
+		)
+		SELECT o.id::text, o.order_number, o.channel,
+			CASE WHEN t.identifier IS NOT NULL THEN 'Стол ' || t.identifier
+				WHEN o.channel = 'pickup' THEN 'Самовывоз' ELSE 'Онлайн' END,
+			COALESCE(o.guest_name, ''), o.total_minor, o.currency, o.status,
+			COALESCE(o.notes, ''), o.created_at,
+			COALESCE(r.reservation_code, ''), r.starts_at, COALESCE(r.guest_phone, ''), COALESCE(r.guest_count, 0)
+		FROM updated o LEFT JOIN venue_tables t ON t.id = o.venue_table_id
+		LEFT JOIN reservations r ON r.id = o.reservation_id`, venueID, orderID, status))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Order{}, appfault.ErrNotFound
 	}
-	return order, err
+	if err != nil {
+		return Order{}, err
+	}
+	items, err := r.db.Query(ctx, `SELECT item_name, quantity, unit_price_minor FROM order_items
+		WHERE order_id = $1 ORDER BY created_at, id`, order.ID)
+	if err != nil {
+		return Order{}, err
+	}
+	defer items.Close()
+	for items.Next() {
+		var item OrderItem
+		if err := items.Scan(&item.Name, &item.Quantity, &item.UnitPriceMinor); err != nil {
+			return Order{}, err
+		}
+		order.Items = append(order.Items, item)
+	}
+	return order, items.Err()
 }
 
 type orderScanner interface {

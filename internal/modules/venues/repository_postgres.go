@@ -148,7 +148,7 @@ func (r *PostgresRepository) IsPublished(ctx context.Context, venueID string) (b
 
 func (r *PostgresRepository) ListPublishedMenu(ctx context.Context, venueID string) ([]PublicMenuCategory, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT c.id::text, c.name, i.id::text, i.name, COALESCE(i.description, ''),
+		SELECT c.id::text, c.name, c.preorder_enabled, i.id::text, i.name, COALESCE(i.description, ''),
 		       i.price_minor, i.currency,
 		       COALESCE((SELECT public_url FROM menu_item_images
 		                 WHERE menu_item_id = i.id ORDER BY sort_order, id LIMIT 1), ''),
@@ -167,14 +167,15 @@ func (r *PostgresRepository) ListPublishedMenu(ctx context.Context, venueID stri
 	categories := []PublicMenuCategory{}
 	for rows.Next() {
 		var categoryID, categoryName string
+		var preorderEnabled bool
 		var item PublicMenuItem
-		if err := rows.Scan(&categoryID, &categoryName, &item.ID, &item.Name,
+		if err := rows.Scan(&categoryID, &categoryName, &preorderEnabled, &item.ID, &item.Name,
 			&item.Description, &item.PriceMinor, &item.Currency, &item.ImageURL,
 			&item.PortionWeightG, &item.EnergyKcal, &item.ProteinG, &item.FatG, &item.CarbsG); err != nil {
 			return nil, err
 		}
 		if len(categories) == 0 || categories[len(categories)-1].ID != categoryID {
-			categories = append(categories, PublicMenuCategory{ID: categoryID, Name: categoryName, Items: []PublicMenuItem{}})
+			categories = append(categories, PublicMenuCategory{ID: categoryID, Name: categoryName, PreorderEnabled: preorderEnabled, Items: []PublicMenuItem{}})
 		}
 		categories[len(categories)-1].Items = append(categories[len(categories)-1].Items, item)
 	}

@@ -27,13 +27,17 @@ func TestPublicMenuIntegration(t *testing.T) {
 	}
 	owner := catalog.NewService(catalog.NewPostgresRepository(db), access.NewVenueAuthorizer(db))
 	spots := venues.NewService(venues.NewPostgresRepository(db))
-	second, err := owner.CreateCategory(ctx, ownerID, venueID, catalog.CategoryInput{Name: "Drinks", SortOrder: 2})
+	preorderDisabled := false
+	second, err := owner.CreateCategory(ctx, ownerID, venueID, catalog.CategoryInput{Name: "Drinks", SortOrder: 2, PreorderEnabled: &preorderDisabled})
 	if err != nil {
 		t.Fatal(err)
 	}
 	first, err := owner.CreateCategory(ctx, ownerID, venueID, catalog.CategoryInput{Name: "Food", SortOrder: 1})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !first.PreorderEnabled || second.PreorderEnabled {
+		t.Fatalf("category preorder defaults/settings: %+v, %+v", first, second)
 	}
 	available := true
 	weight, energy, protein, fat, carbs := 250, 196.5, 8.25, 0.0, 28.0
@@ -64,6 +68,29 @@ func TestPublicMenuIntegration(t *testing.T) {
 	if len(menu) != 2 || menu[0].ID != first.ID || menu[1].ID != second.ID ||
 		len(menu[0].Items) != 2 || menu[0].Items[0].ID != earlier.ID || menu[0].Items[1].ID != item.ID {
 		t.Fatalf("category/item order differs from Vendor: %+v", menu)
+	}
+	if !menu[0].PreorderEnabled || menu[1].PreorderEnabled {
+		t.Fatalf("public preorder flags differ from Vendor: %+v", menu)
+	}
+	// Turning off preorder keeps the ordinary published menu intact.
+	if _, err := owner.UpdateCategory(ctx, ownerID, venueID, first.ID, catalog.CategoryInput{Name: "Food", SortOrder: 1, PreorderEnabled: &preorderDisabled}); err != nil {
+		t.Fatal(err)
+	}
+	updatedCategory, err := owner.UpdateCategory(ctx, ownerID, venueID, first.ID, catalog.CategoryInput{Name: "Food", SortOrder: 1})
+	if err != nil || updatedCategory.PreorderEnabled {
+		t.Fatalf("omitted flag must preserve preorder setting: %+v, %v", updatedCategory, err)
+	}
+	ownedCategories, err := owner.ListCategories(ctx, ownerID, venueID)
+	if err != nil || len(ownedCategories) != 2 || ownedCategories[0].PreorderEnabled || ownedCategories[1].PreorderEnabled {
+		t.Fatalf("Vendor category reload: %+v, %v", ownedCategories, err)
+	}
+	menu, err = spots.ListPublishedMenu(ctx, venueID)
+	if err != nil || len(menu) != 2 || menu[0].PreorderEnabled || len(menu[0].Items) != 2 {
+		t.Fatalf("preorder setting hid ordinary menu: %+v, %v", menu, err)
+	}
+	preorderEnabled := true
+	if _, err := owner.UpdateCategory(ctx, ownerID, venueID, first.ID, catalog.CategoryInput{Name: "Food", SortOrder: 1, PreorderEnabled: &preorderEnabled}); err != nil {
+		t.Fatal(err)
 	}
 	if got := menu[0].Items[1]; got.PriceMinor != 750 || got.Currency != "EUR" || got.ImageURL != "https://example.test/old.jpg" {
 		t.Fatalf("public item differs from Vendor: %+v", got)

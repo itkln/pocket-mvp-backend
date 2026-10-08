@@ -93,9 +93,10 @@ type PublicMenuItem struct {
 }
 
 type PublicMenuCategory struct {
-	ID    string           `json:"id"`
-	Name  string           `json:"name"`
-	Items []PublicMenuItem `json:"items"`
+	ID              string           `json:"id"`
+	Name            string           `json:"name"`
+	PreorderEnabled bool             `json:"preorder_enabled"`
+	Items           []PublicMenuItem `json:"items"`
 }
 
 // PublicReview omits order, table and guest identity from the public feed.

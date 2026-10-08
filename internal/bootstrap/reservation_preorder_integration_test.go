@@ -73,13 +73,28 @@ func TestReservationPreorderIntegration(t *testing.T) {
 		candidate := input
 		candidate.IdempotencyKey = invalid.key + "-preorder-test"
 		candidate.Items = []reservations.PreorderItem{invalid.item}
+		if invalid.key == "foreign" {
+			candidate.Items = append(input.Items, invalid.item)
+		}
 		if _, err := booking.Create(ctx, venueID, candidate); !errors.Is(err, invalid.want) {
 			t.Fatalf("%s: expected %v, got %v", invalid.key, invalid.want, err)
 		}
 	}
+	if _, err := db.Exec(ctx, `UPDATE menu_categories SET preorder_enabled = false WHERE id = $1`, categoryID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := booking.Create(ctx, venueID, input); !errors.Is(err, reservations.ErrItemUnavailable) {
+		t.Fatalf("disabled category accepted on direct booking: %v", err)
+	}
+	if _, err := db.Exec(ctx, `UPDATE menu_categories SET preorder_enabled = true WHERE id = $1`, categoryID); err != nil {
+		t.Fatal(err)
+	}
 	var count int
 	if err := db.QueryRow(ctx, `SELECT count(*) FROM reservations WHERE venue_id = $1`, venueID).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("invalid preorder created reservation: %d, %v", count, err)
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM orders WHERE venue_id = $1`, venueID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("failed booking left an order: %d, %v", count, err)
 	}
 	created, err := booking.Create(ctx, venueID, input)
 	if err != nil {
@@ -96,8 +111,20 @@ func TestReservationPreorderIntegration(t *testing.T) {
 		t.Fatalf("price snapshot: %d, %v", count, err)
 	}
 	ownerOrders, err := ordering.NewPostgresRepository(db).List(ctx, venueID)
-	if err != nil || len(ownerOrders) != 1 || ownerOrders[0].ReservationCode != created.Code || len(ownerOrders[0].Items) != 1 || ownerOrders[0].TotalMinor != 2400 {
+	if err != nil || len(ownerOrders) != 1 || ownerOrders[0].ReservationCode != created.Code || len(ownerOrders[0].Items) != 1 || ownerOrders[0].TotalMinor != 2400 ||
+		ownerOrders[0].ReservationStartsAt == nil || !ownerOrders[0].ReservationStartsAt.Equal(input.StartsAt) || ownerOrders[0].GuestName != input.GuestName || ownerOrders[0].GuestPhone != input.GuestPhone || ownerOrders[0].GuestCount != input.Guests {
 		t.Fatalf("Vendor preorder: %+v, %v", ownerOrders, err)
+	}
+	updatedOrder, err := ordering.NewPostgresRepository(db).UpdateStatus(ctx, venueID, ownerOrders[0].ID, "accepted")
+	if err != nil || updatedOrder.Status != "accepted" || updatedOrder.ReservationCode != created.Code ||
+		updatedOrder.ReservationStartsAt == nil || !updatedOrder.ReservationStartsAt.Equal(input.StartsAt) ||
+		updatedOrder.GuestPhone != input.GuestPhone || updatedOrder.GuestCount != input.Guests ||
+		len(updatedOrder.Items) != 1 || updatedOrder.Items[0].Name != "Pasta" || updatedOrder.Items[0].UnitPriceMinor != 1200 {
+		t.Fatalf("Vendor status update lost booking/preorder details: %+v, %v", updatedOrder, err)
+	}
+	otherOrders, err := ordering.NewPostgresRepository(db).List(ctx, otherVenueID)
+	if err != nil || len(otherOrders) != 0 {
+		t.Fatalf("preorder leaked into another venue: %+v, %v", otherOrders, err)
 	}
 	conflicting := input
 	conflicting.IdempotencyKey = "preorder-integration-2"
@@ -115,6 +142,27 @@ func TestReservationPreorderIntegration(t *testing.T) {
 	hold, err := booking.Hold(ctx, venueID, accountBooking)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, `UPDATE menu_categories SET preorder_enabled = false WHERE id = $1`, categoryID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := booking.Confirm(ctx, venueID, hold.ID, accountBooking); !errors.Is(err, reservations.ErrItemUnavailable) {
+		t.Fatalf("disabled category accepted after hold: %v", err)
+	}
+	var holdStatus string
+	if err := db.QueryRow(ctx, `SELECT status FROM reservations WHERE id = $1`, hold.ID).Scan(&holdStatus); err != nil || holdStatus != "pending" {
+		t.Fatalf("failed confirmation changed hold: %s, %v", holdStatus, err)
+	}
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM reservation_preorder_items WHERE reservation_id = $1`, hold.ID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("failed confirmation left preorder items: %d, %v", count, err)
+	}
+	if _, err := db.Exec(ctx, `UPDATE menu_categories SET preorder_enabled = true WHERE id = $1`, categoryID); err != nil {
+		t.Fatal(err)
+	}
+	stalePrice := accountBooking
+	stalePrice.Items = []reservations.PreorderItem{{MenuItemID: itemID, Quantity: 1, ExpectedPriceMinor: 1000}}
+	if _, err := booking.Confirm(ctx, venueID, hold.ID, stalePrice); !errors.Is(err, reservations.ErrPriceChanged) {
+		t.Fatalf("stale price accepted after hold: %v", err)
 	}
 	accountResult, err := booking.Confirm(ctx, venueID, hold.ID, accountBooking)
 	if err != nil {
@@ -159,6 +207,13 @@ func TestReservationPreorderIntegration(t *testing.T) {
 	}
 	if _, err := db.Exec(ctx, `UPDATE menu_items SET name = 'Changed pasta', price_minor = 9999 WHERE id = $1`, itemID); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, `UPDATE menu_categories SET preorder_enabled = false WHERE id = $1`, categoryID); err != nil {
+		t.Fatal(err)
+	}
+	replayedSaved, err := booking.Create(ctx, venueID, input)
+	if err != nil || replayedSaved.ID != created.ID || replayedSaved.PreorderTotalMinor != 2400 {
+		t.Fatalf("saved booking changed with menu settings: %+v, %v", replayedSaved, err)
 	}
 	checkList := func() {
 		t.Helper()

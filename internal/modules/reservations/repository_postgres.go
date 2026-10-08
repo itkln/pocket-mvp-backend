@@ -79,7 +79,7 @@ func (r *PostgresRepository) Create(ctx context.Context, venueID string, input C
 		var price int
 		err = tx.QueryRow(ctx, `SELECT i.name, i.price_minor, i.currency FROM menu_items i
 			JOIN menu_categories c ON c.id = i.category_id AND c.venue_id = i.venue_id
-			WHERE i.id = $1 AND i.venue_id = $2 AND i.is_available AND i.deleted_at IS NULL AND c.is_active
+			WHERE i.id = $1 AND i.venue_id = $2 AND i.is_available AND i.deleted_at IS NULL AND c.is_active AND c.preorder_enabled
 			FOR SHARE OF i, c`, item.MenuItemID, venueID).Scan(&name, &price, &itemCurrency)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Result{}, ErrItemUnavailable

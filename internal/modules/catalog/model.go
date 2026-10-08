@@ -1,17 +1,19 @@
 package catalog
 
 type Category struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	SortOrder int    `json:"sort_order"`
-	IsActive  bool   `json:"is_active"`
-	ItemCount int    `json:"item_count"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	SortOrder       int    `json:"sort_order"`
+	IsActive        bool   `json:"is_active"`
+	PreorderEnabled bool   `json:"preorder_enabled"`
+	ItemCount       int    `json:"item_count"`
 }
 
 type CategoryInput struct {
-	Name      string `json:"name"`
-	SortOrder int    `json:"sort_order"`
-	IsActive  *bool  `json:"is_active,omitempty"`
+	Name            string `json:"name"`
+	SortOrder       int    `json:"sort_order"`
+	IsActive        *bool  `json:"is_active,omitempty"`
+	PreorderEnabled *bool  `json:"preorder_enabled,omitempty"`
 }
 
 type MenuItem struct {
