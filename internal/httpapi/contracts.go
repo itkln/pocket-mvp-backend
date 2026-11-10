@@ -46,6 +46,7 @@ type VenueService interface {
 	ListPublishedMenu(context.Context, string) ([]venues.PublicMenuCategory, error)
 	ListPublishedReviews(context.Context, string) ([]venues.PublicReview, error)
 	Create(context.Context, string, venues.Input) (venues.Venue, error)
+	Get(context.Context, string, string) (venues.Venue, error)
 	Update(context.Context, string, string, venues.Input) (venues.Venue, error)
 	Delete(context.Context, string, string) error
 }

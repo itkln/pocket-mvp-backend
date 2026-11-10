@@ -13,12 +13,14 @@ import (
 	"pocket-mvp-backend/internal/modules/dinein"
 	"pocket-mvp-backend/internal/modules/feedback"
 	"pocket-mvp-backend/internal/modules/floorplan"
+	"pocket-mvp-backend/internal/modules/venues"
 	"pocket-mvp-backend/internal/modules/workforce"
 	"pocket-mvp-backend/internal/security"
 )
 
-// V-BE-02: managers run the menu and the floor (plan and table QR codes) besides orders; waiters
-// only orders; team, reviews and the rest stay with the owner. Denied users get 404.
+// V-BE-02: managers run the menu, the floor (plan and table QR codes) and the venue settings
+// besides orders; waiters only orders; team, reviews, deleting the venue and the rest stay with
+// the owner. Denied users get 404.
 func TestVenueCapabilitiesIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
@@ -50,6 +52,8 @@ func TestVenueCapabilitiesIntegration(t *testing.T) {
 	tables := dinein.NewService(dinein.NewPostgresRepository(db), authorizer, protector, "https://dish.example")
 	team := workforce.NewService(workforce.NewPostgresRepository(db), authorizer)
 	reviews := feedback.NewService(feedback.NewPostgresRepository(db), authorizer)
+	profile := venues.NewService(venues.NewPostgresRepository(db), authorizer)
+	settingsInput := venues.Input{Name: "Capabilities", Address: "Main", City: "Bratislava", CountryCode: "SK", Timezone: "Europe/Bratislava", Currency: "EUR", Status: "active", Settings: map[string]any{"cover_image_url": "https://example.test/cover.jpg"}}
 	plan := json.RawMessage(`[{"id":"floor-1","name":"Main","tables":[{"id":"07","seats":4,"x":10,"y":20}],"fixtures":[]}]`)
 
 	checks := map[string]func(string) error{
@@ -70,6 +74,14 @@ func TestVenueCapabilitiesIntegration(t *testing.T) {
 			_, err := tables.OwnerQRCode(ctx, actor, venue, "07", false)
 			return err
 		},
+		"settings": func(actor string) error {
+			settingsInput.Description = "Edited by " + actor
+			if _, err := profile.Update(ctx, actor, venue, settingsInput); err != nil {
+				return err
+			}
+			_, err := profile.Get(ctx, actor, venue)
+			return err
+		},
 		"team": func(actor string) error {
 			_, err := team.List(ctx, actor, venue)
 			return err
@@ -80,8 +92,8 @@ func TestVenueCapabilitiesIntegration(t *testing.T) {
 		},
 	}
 	allowed := map[string][]string{
-		"owner":    {"menu", "floor", "team", "reviews"},
-		"manager":  {"menu", "floor"},
+		"owner":    {"menu", "floor", "settings", "team", "reviews"},
+		"manager":  {"menu", "floor", "settings"},
 		"waiter":   {},
 		"outsider": {},
 	}
@@ -100,10 +112,27 @@ func TestVenueCapabilitiesIntegration(t *testing.T) {
 			}
 		}
 	}
+	// The workplace list carries the full profile only for those who edit it.
+	for actor, full := range map[string]bool{"owner": true, "manager": true, "waiter": false} {
+		places, err := profile.ListWorkplaces(ctx, actors[actor])
+		must(err)
+		if len(places) != 1 {
+			t.Fatalf("%s workplaces: %v", actor, places)
+		}
+		hasProfile := places[0].Settings["cover_image_url"] != nil && places[0].Description != ""
+		if hasProfile != full || places[0].AccessRole != actor {
+			t.Errorf("%s workplace profile: full=%v, got %+v", actor, full, places[0])
+		}
+	}
+	// Only the owner removes the venue.
+	if err := profile.Delete(ctx, actors["manager"], venue); !errors.Is(err, appfault.ErrNotFound) {
+		t.Fatalf("manager deleted the venue: %v", err)
+	}
 	// A manager whose membership ends loses the menu at once.
 	_, err = db.Exec(ctx, `UPDATE venue_staff SET status='inactive' WHERE user_id=$1`, actors["manager"])
 	must(err)
 	if err := checks["menu"](actors["manager"]); !errors.Is(err, appfault.ErrNotFound) {
 		t.Fatalf("inactive manager kept the menu: %v", err)
 	}
+	must(profile.Delete(ctx, owner, venue))
 }

@@ -26,7 +26,7 @@ func TestPublicMenuIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	owner := catalog.NewService(catalog.NewPostgresRepository(db), access.NewVenueAuthorizer(db))
-	dish := venues.NewService(venues.NewPostgresRepository(db))
+	dish := venues.NewService(venues.NewPostgresRepository(db), access.NewVenueAuthorizer(db))
 	preorderDisabled := false
 	second, err := owner.CreateCategory(ctx, ownerID, venueID, catalog.CategoryInput{Name: "Drinks", SortOrder: 2, PreorderEnabled: &preorderDisabled})
 	if err != nil {

@@ -21,11 +21,14 @@ func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
+// venueColumns are the columns scanVenue reads, in its order.
+const venueColumns = `id::text, name, slug, COALESCE(description, ''), COALESCE(cuisine_type, ''),
+	COALESCE(phone, ''), COALESCE(email, ''), address_line1, city,
+	COALESCE(postal_code, ''), country_code, timezone, currency, status, settings, created_at`
+
 func (r *PostgresRepository) List(ctx context.Context, ownerID string) ([]Venue, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id::text, name, slug, COALESCE(description, ''), COALESCE(cuisine_type, ''),
-		       COALESCE(phone, ''), COALESCE(email, ''), address_line1, city,
-		       COALESCE(postal_code, ''), country_code, timezone, currency, status, settings, created_at
+		SELECT `+venueColumns+`
 		FROM venues
 		WHERE owner_user_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at`, ownerID)
@@ -197,23 +200,30 @@ func (r *PostgresRepository) Create(ctx context.Context, ownerID, slug string, i
 	return venue, nil
 }
 
-func (r *PostgresRepository) Update(ctx context.Context, ownerID, venueID string, input Input) (Venue, error) {
+func (r *PostgresRepository) Get(ctx context.Context, venueID string) (Venue, error) {
+	venue, err := scanVenue(r.db.QueryRow(ctx, `SELECT `+venueColumns+` FROM venues WHERE id = $1 AND deleted_at IS NULL`, venueID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Venue{}, appfault.ErrNotFound
+	}
+	return venue, err
+}
+
+// Update and Delete trust the service: it has already checked the user's venue capability.
+func (r *PostgresRepository) Update(ctx context.Context, venueID string, input Input) (Venue, error) {
 	settings, err := json.Marshal(input.Settings)
 	if err != nil {
 		return Venue{}, appfault.ErrInvalidInput
 	}
 	row := r.db.QueryRow(ctx, `
 		UPDATE venues
-		SET name = $3, description = NULLIF($4, ''), cuisine_type = NULLIF($5, ''),
-		    phone = NULLIF($6, ''), email = NULLIF($7, ''), address_line1 = $8,
-		    city = $9, postal_code = NULLIF($10, ''), country_code = $11,
-		    timezone = $12, currency = $13, status = $14,
-		    settings = settings || ($15::jsonb - 'floor_plan')
-		WHERE id = $2 AND owner_user_id = $1 AND deleted_at IS NULL
-		RETURNING id::text, name, slug, COALESCE(description, ''), COALESCE(cuisine_type, ''),
-		          COALESCE(phone, ''), COALESCE(email, ''), address_line1, city,
-		          COALESCE(postal_code, ''), country_code, timezone, currency, status, settings, created_at`,
-		ownerID, venueID, input.Name, input.Description, input.CuisineType, input.Phone,
+		SET name = $2, description = NULLIF($3, ''), cuisine_type = NULLIF($4, ''),
+		    phone = NULLIF($5, ''), email = NULLIF($6, ''), address_line1 = $7,
+		    city = $8, postal_code = NULLIF($9, ''), country_code = $10,
+		    timezone = $11, currency = $12, status = $13,
+		    settings = settings || ($14::jsonb - 'floor_plan')
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING `+venueColumns,
+		venueID, input.Name, input.Description, input.CuisineType, input.Phone,
 		input.Email, input.Address, input.City, input.PostalCode, input.CountryCode,
 		input.Timezone, input.Currency, input.Status, settings,
 	)
@@ -224,11 +234,11 @@ func (r *PostgresRepository) Update(ctx context.Context, ownerID, venueID string
 	return venue, appfault.MapWriteError(err)
 }
 
-func (r *PostgresRepository) Delete(ctx context.Context, ownerID, venueID string) error {
+func (r *PostgresRepository) Delete(ctx context.Context, venueID string) error {
 	result, err := r.db.Exec(ctx, `
 		UPDATE venues
 		SET deleted_at = now(), status = 'closed'
-		WHERE id = $2 AND owner_user_id = $1 AND deleted_at IS NULL`, ownerID, venueID)
+		WHERE id = $1 AND deleted_at IS NULL`, venueID)
 	if err != nil {
 		return err
 	}
@@ -287,26 +297,39 @@ func settingStrings(settings map[string]any, key string) []string {
 	return result
 }
 
-// ListWorkplaces returns operational venue context, without private settings or owner contacts.
+// ListWorkplaces returns the venues the user owns or works at, with the user's venue role. The
+// service decides how much of each venue the role may see.
 func (r *PostgresRepository) ListWorkplaces(ctx context.Context, userID string) ([]Venue, error) {
 	rows, err := r.db.Query(ctx, `
- SELECT v.id::text,v.name,v.slug,v.address_line1,v.city,v.country_code,v.timezone,v.currency,v.status,
- CASE WHEN v.owner_user_id=$1 THEN 'owner' ELSE s.role END
- FROM venues v LEFT JOIN venue_staff s ON s.venue_id=v.id AND s.user_id=$1 AND s.status='active' AND s.removed_at IS NULL
- WHERE v.deleted_at IS NULL AND (v.owner_user_id=$1 OR s.id IS NOT NULL)
- ORDER BY v.created_at,v.id`, userID)
+		SELECT `+venueColumns+`, access_role
+		FROM (
+			SELECT v.*, CASE WHEN v.owner_user_id = $1 THEN 'owner' ELSE s.role END AS access_role
+			FROM venues v
+			LEFT JOIN venue_staff s ON s.venue_id = v.id AND s.user_id = $1 AND s.status = 'active' AND s.removed_at IS NULL
+			WHERE v.deleted_at IS NULL AND (v.owner_user_id = $1 OR s.id IS NOT NULL)
+		) workplaces
+		ORDER BY created_at, id`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	result := []Venue{}
 	for rows.Next() {
-		var v Venue
-		if err := rows.Scan(&v.ID, &v.Name, &v.Slug, &v.Address, &v.City, &v.CountryCode, &v.Timezone, &v.Currency, &v.Status, &v.AccessRole); err != nil {
+		var role string
+		venue, err := scanVenue(withRole{rows, &role})
+		if err != nil {
 			return nil, err
 		}
-		v.Settings = map[string]any{}
-		result = append(result, v)
+		venue.AccessRole = role
+		result = append(result, venue)
 	}
 	return result, rows.Err()
 }
+
+// withRole reads the access role column that follows the venue columns.
+type withRole struct {
+	row  venueScanner
+	role *string
+}
+
+func (w withRole) Scan(dest ...any) error { return w.row.Scan(append(dest, w.role)...) }

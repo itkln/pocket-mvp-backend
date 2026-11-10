@@ -56,7 +56,7 @@ func NewHTTPHandler(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) (h
 	if err != nil {
 		return nil, err
 	}
-	venueService := venues.NewService(venues.NewPostgresRepository(db))
+	venueService := venues.NewService(venues.NewPostgresRepository(db), venueAuthorizer)
 	availabilityRepository := availability.NewPostgresRepository(db)
 	availabilityService := availability.NewService(availabilityRepository)
 

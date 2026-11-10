@@ -7,16 +7,22 @@ import (
 	"regexp"
 	"strings"
 
+	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/security"
 )
 
-type Service struct {
-	repository Repository
+type VenueAuthorizer interface {
+	Require(context.Context, string, string, access.Capability) error
 }
 
-func NewService(repository Repository) *Service {
-	return &Service{repository: repository}
+type Service struct {
+	repository Repository
+	authorizer VenueAuthorizer
+}
+
+func NewService(repository Repository, authorizer VenueAuthorizer) *Service {
+	return &Service{repository: repository, authorizer: authorizer}
 }
 
 func (s *Service) List(ctx context.Context, ownerID string) ([]Venue, error) {
@@ -89,16 +95,31 @@ func (s *Service) Create(ctx context.Context, ownerID string, input Input) (Venu
 	return s.repository.Create(ctx, ownerID, slug, input)
 }
 
-func (s *Service) Update(ctx context.Context, ownerID, venueID string, input Input) (Venue, error) {
+// Get returns the full venue profile to those who may edit it.
+func (s *Service) Get(ctx context.Context, userID, venueID string) (Venue, error) {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageSettings); err != nil {
+		return Venue{}, err
+	}
+	return s.repository.Get(ctx, venueID)
+}
+
+func (s *Service) Update(ctx context.Context, userID, venueID string, input Input) (Venue, error) {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageSettings); err != nil {
+		return Venue{}, err
+	}
 	input = normalizeInput(input)
 	if !validInput(input) {
 		return Venue{}, appfault.ErrInvalidInput
 	}
-	return s.repository.Update(ctx, ownerID, venueID, input)
+	return s.repository.Update(ctx, venueID, input)
 }
 
-func (s *Service) Delete(ctx context.Context, ownerID, venueID string) error {
-	return s.repository.Delete(ctx, ownerID, venueID)
+// Delete stays with the owner: managers edit the venue but may not remove it.
+func (s *Service) Delete(ctx context.Context, userID, venueID string) error {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageVenue); err != nil {
+		return err
+	}
+	return s.repository.Delete(ctx, venueID)
 }
 
 func normalizeInput(input Input) Input {
@@ -166,6 +187,26 @@ func slugify(value string) string {
 	return strings.Trim(value, "-")
 }
 
+// ListWorkplaces returns the venues a user works at. Those who may edit a venue get its full
+// profile; the others get operational context only, without private settings or owner contacts.
 func (s *Service) ListWorkplaces(ctx context.Context, userID string) ([]Venue, error) {
-	return s.repository.ListWorkplaces(ctx, userID)
+	items, err := s.repository.ListWorkplaces(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for i, venue := range items {
+		if !access.Allows(venue.AccessRole, access.ManageSettings) {
+			items[i] = operationalView(venue)
+		}
+	}
+	return items, nil
+}
+
+func operationalView(venue Venue) Venue {
+	return Venue{
+		AccessRole: venue.AccessRole, ID: venue.ID, Name: venue.Name, Slug: venue.Slug,
+		Address: venue.Address, City: venue.City, CountryCode: venue.CountryCode,
+		Timezone: venue.Timezone, Currency: venue.Currency, Status: venue.Status,
+		Settings: map[string]any{},
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/modules/venues"
 	"strings"
 	"testing"
@@ -13,12 +14,16 @@ import (
 
 type publicPageVenues struct {
 	VenueService
-	owner string
+	user string
 }
 
-func (s *publicPageVenues) List(_ context.Context, owner string) ([]venues.Venue, error) {
-	s.owner = owner
-	return []venues.Venue{{ID: "own-venue", Status: "draft"}}, nil
+// Get stands in for the venue capability check: only own-venue may be edited by this user.
+func (s *publicPageVenues) Get(_ context.Context, user, venueID string) (venues.Venue, error) {
+	s.user = user
+	if venueID != "own-venue" {
+		return venues.Venue{}, appfault.ErrNotFound
+	}
+	return venues.Venue{ID: "own-venue", Status: "draft"}, nil
 }
 func TestOwnerPublicPageScopesVenueAndKeepsDraftHidden(t *testing.T) {
 	repository := &publicPageVenues{}
@@ -41,7 +46,7 @@ func TestOwnerPublicPageScopesVenueAndKeepsDraftHidden(t *testing.T) {
 			t.Fatal(response.Body.String())
 		}
 	}
-	if repository.owner != "user-1" {
-		t.Fatal("owner identity not enforced")
+	if repository.user != "user-1" {
+		t.Fatal("user identity not enforced")
 	}
 }

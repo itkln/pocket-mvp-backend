@@ -25,10 +25,11 @@ func (r *repositorySpy) ListPublishedReviews(context.Context, string) ([]PublicR
 func (r *repositorySpy) Create(context.Context, string, string, Input) (Venue, error) {
 	return Venue{}, nil
 }
-func (r *repositorySpy) Update(context.Context, string, string, Input) (Venue, error) {
+func (r *repositorySpy) Get(context.Context, string) (Venue, error) { return Venue{}, nil }
+func (r *repositorySpy) Update(context.Context, string, Input) (Venue, error) {
 	return Venue{}, nil
 }
-func (r *repositorySpy) Delete(context.Context, string, string) error { return nil }
+func (r *repositorySpy) Delete(context.Context, string) error { return nil }
 
 func TestNormalizeInputUsesSafeDefaults(t *testing.T) {
 	input := normalizeInput(Input{Name: "  Mokka  ", City: " Bratislava "})
@@ -45,7 +46,7 @@ func TestNormalizeInputUsesSafeDefaults(t *testing.T) {
 
 func TestListPublishedMenuExcludesUnpublishedVenueAndNormalizesEmptyList(t *testing.T) {
 	repository := &repositorySpy{}
-	service := NewService(repository)
+	service := NewService(repository, nil)
 	id := "11111111-1111-4111-8111-111111111111"
 	if _, err := service.ListPublishedMenu(context.Background(), "invalid"); err == nil {
 		t.Fatal("invalid ID was accepted")
@@ -62,7 +63,7 @@ func TestListPublishedMenuExcludesUnpublishedVenueAndNormalizesEmptyList(t *test
 
 func TestListPublishedReviewsExcludesUnpublishedVenueAndNormalizesEmptyList(t *testing.T) {
 	repository := &repositorySpy{}
-	service := NewService(repository)
+	service := NewService(repository, nil)
 	id := "11111111-1111-4111-8111-111111111111"
 	if _, err := service.ListPublishedReviews(context.Background(), "invalid"); err == nil {
 		t.Fatal("invalid ID was accepted")

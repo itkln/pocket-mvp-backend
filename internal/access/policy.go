@@ -11,7 +11,9 @@ const (
 	ManageMenu Capability = "menu"
 	// ManageFloor: the floor plan and table QR codes.
 	ManageFloor Capability = "floor"
-	// ManageVenue: everything else — team, venue settings, reviews, payments, reports, subscription.
+	// ManageSettings: the venue profile — name, contacts, address, hours, cover, logo, publication.
+	ManageSettings Capability = "settings"
+	// ManageVenue: everything else — team, reviews, payments, reports, subscription, deleting the venue.
 	ManageVenue Capability = "venue"
 )
 
@@ -22,11 +24,11 @@ const (
 	RoleWaiter  = "waiter"
 )
 
-// MVP decision of 2026-11-10 (V-SRV-01, V-BE-02): waiters run orders; managers also run the menu
-// and the floor; the owner can do everything.
+// MVP decision of 2026-11-10 (V-SRV-01, V-BE-02): waiters run orders; managers also run the menu,
+// the floor and the venue settings; the owner can do everything.
 var roleCapabilities = map[string][]Capability{
-	RoleOwner:   {ManageOrders, ManageMenu, ManageFloor, ManageVenue},
-	RoleManager: {ManageOrders, ManageMenu, ManageFloor},
+	RoleOwner:   {ManageOrders, ManageMenu, ManageFloor, ManageSettings, ManageVenue},
+	RoleManager: {ManageOrders, ManageMenu, ManageFloor, ManageSettings},
 	RoleWaiter:  {ManageOrders},
 }
 

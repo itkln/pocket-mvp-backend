@@ -10,6 +10,7 @@ type Repository interface {
 	ListPublishedReviews(context.Context, string) ([]PublicReview, error)
 	IsPublished(context.Context, string) (bool, error)
 	Create(context.Context, string, string, Input) (Venue, error)
-	Update(context.Context, string, string, Input) (Venue, error)
-	Delete(context.Context, string, string) error
+	Get(context.Context, string) (Venue, error)
+	Update(context.Context, string, Input) (Venue, error)
+	Delete(context.Context, string) error
 }

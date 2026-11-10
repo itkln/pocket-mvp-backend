@@ -128,6 +128,10 @@ func TestPublicVenueSearchIsGone(t *testing.T) {
 	}
 }
 
+func (s *venueRouteSpy) Get(context.Context, string, string) (venues.Venue, error) {
+	return venues.Venue{}, nil
+}
+
 func (s *venueRouteSpy) Update(context.Context, string, string, venues.Input) (venues.Venue, error) {
 	return venues.Venue{}, nil
 }

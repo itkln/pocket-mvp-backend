@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/modules/venues"
 )
@@ -17,7 +18,7 @@ func TestVenueBrandingIntegration(t *testing.T) {
 		VALUES ('branding@example.test', 'test-only', 'Test', 'Owner', 'venue_owner') RETURNING id::text`).Scan(&ownerID); err != nil {
 		t.Fatal(err)
 	}
-	service := venues.NewService(venues.NewPostgresRepository(db))
+	service := venues.NewService(venues.NewPostgresRepository(db), access.NewVenueAuthorizer(db))
 	input := venues.Input{Name: "First Bistro", Address: "Main 1", City: "Bratislava", CountryCode: "SK", Timezone: "Europe/Bratislava", Currency: "EUR", Status: "active", Settings: map[string]any{"cover_image_url": "https://example.test/cover.jpg", "preorder_enabled": true}}
 	first, err := service.Create(ctx, ownerID, input)
 	if err != nil {
