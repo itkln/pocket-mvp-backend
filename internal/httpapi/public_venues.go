@@ -4,47 +4,9 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"pocket-mvp-backend/internal/appfault"
-	"pocket-mvp-backend/internal/modules/venues"
 )
-
-func (api *API) searchPublicVenues(w http.ResponseWriter, r *http.Request) {
-	page, ok := positiveQueryInt(r, "page", 1)
-	if !ok {
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the catalog parameters.")
-		return
-	}
-	pageSize, ok := positiveQueryInt(r, "page_size", 24)
-	if !ok {
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the catalog parameters.")
-		return
-	}
-	var ids []string
-	if raw, present := r.URL.Query()["ids"]; present {
-		if len(raw) != 1 || strings.TrimSpace(raw[0]) == "" {
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the catalog parameters.")
-			return
-		}
-		ids = strings.Split(raw[0], ",")
-	}
-	result, err := api.venues.SearchPublished(r.Context(), venues.PublicVenueQuery{
-		City: r.URL.Query().Get("city"), Search: r.URL.Query().Get("q"),
-		Category: r.URL.Query().Get("category"), Filter: r.URL.Query().Get("filter"),
-		IDs: ids, Page: page, PageSize: pageSize,
-	})
-	if err != nil {
-		if errors.Is(err, appfault.ErrInvalidInput) {
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the catalog parameters.")
-			return
-		}
-		api.logger.Error("public venue search failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The catalog could not be loaded.")
-		return
-	}
-	writeJSON(w, http.StatusOK, result)
-}
 
 func (api *API) getPublicVenue(w http.ResponseWriter, r *http.Request) {
 	item, err := api.venues.GetPublished(r.Context(), pathParam(r, "venueID"))

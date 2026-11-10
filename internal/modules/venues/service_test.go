@@ -6,17 +6,12 @@ import (
 )
 
 type repositorySpy struct {
-	query     PublicVenueQuery
 	published bool
 	menu      []PublicMenuCategory
 	reviews   []PublicReview
 }
 
 func (r *repositorySpy) List(context.Context, string) ([]Venue, error) { return nil, nil }
-func (r *repositorySpy) SearchPublished(_ context.Context, query PublicVenueQuery) ([]PublicVenue, int, error) {
-	r.query = query
-	return []PublicVenue{{ID: "venue-1"}}, 25, nil
-}
 func (r *repositorySpy) GetPublished(context.Context, string) (PublicVenue, error) {
 	return PublicVenue{}, nil
 }
@@ -45,35 +40,6 @@ func TestNormalizeInputUsesSafeDefaults(t *testing.T) {
 	}
 	if !validInput(input) {
 		t.Fatal("normalized venue should be valid")
-	}
-}
-
-func TestSearchPublishedNormalizesPaginationAndBuildsMetadata(t *testing.T) {
-	repository := &repositorySpy{}
-	page, err := NewService(repository).SearchPublished(context.Background(), PublicVenueQuery{City: " Bratislava ", Filter: "Все"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if repository.query.Page != 1 || repository.query.PageSize != 24 || repository.query.City != "Bratislava" || repository.query.Filter != "" {
-		t.Fatalf("query was not normalized: %#v", repository.query)
-	}
-	if page.Total != 25 || page.TotalPages != 2 || !page.HasNext || len(page.Venues) != 1 {
-		t.Fatalf("unexpected page metadata: %#v", page)
-	}
-}
-
-func TestSearchPublishedRejectsInvalidAndOversizedIDBatches(t *testing.T) {
-	repository := &repositorySpy{}
-	service := NewService(repository)
-	if _, err := service.SearchPublished(context.Background(), PublicVenueQuery{IDs: []string{"not-a-uuid"}}); err == nil {
-		t.Fatal("invalid ID was accepted")
-	}
-	ids := make([]string, 51)
-	for i := range ids {
-		ids[i] = "11111111-1111-4111-8111-111111111111"
-	}
-	if _, err := service.SearchPublished(context.Background(), PublicVenueQuery{IDs: ids}); err == nil {
-		t.Fatal("oversized ID batch was accepted")
 	}
 }
 

@@ -5,7 +5,6 @@ import "context"
 type Repository interface {
 	List(context.Context, string) ([]Venue, error)
 	ListWorkplaces(context.Context, string) ([]Venue, error)
-	SearchPublished(context.Context, PublicVenueQuery) ([]PublicVenue, int, error)
 	GetPublished(context.Context, string) (PublicVenue, error)
 	ListPublishedMenu(context.Context, string) ([]PublicMenuCategory, error)
 	ListPublishedReviews(context.Context, string) ([]PublicReview, error)

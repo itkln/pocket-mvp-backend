@@ -39,7 +39,6 @@ type IdentityService interface {
 type VenueService interface {
 	List(context.Context, string) ([]venues.Venue, error)
 	ListWorkplaces(context.Context, string) ([]venues.Venue, error)
-	SearchPublished(context.Context, venues.PublicVenueQuery) (venues.PublicVenuePage, error)
 	GetPublished(context.Context, string) (venues.PublicVenue, error)
 	ListPublishedMenu(context.Context, string) ([]venues.PublicMenuCategory, error)
 	ListPublishedReviews(context.Context, string) ([]venues.PublicReview, error)

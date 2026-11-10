@@ -40,10 +40,6 @@ func TestVenueBrandingIntegration(t *testing.T) {
 		if err != nil || detail.LogoURL != logo {
 			t.Fatalf("venue %s branding: %v, %v", id, detail, err)
 		}
-		page, err := service.SearchPublished(ctx, venues.PublicVenueQuery{IDs: []string{id}})
-		if err != nil || len(page.Venues) != 1 || page.Venues[0].LogoURL != logo {
-			t.Fatalf("catalog branding: %v, %v", page, err)
-		}
 	}
 	if _, err := service.Update(ctx, "00000000-0000-0000-0000-000000000001", first.ID, input); !errors.Is(err, appfault.ErrNotFound) {
 		t.Fatalf("another owner may not change branding: %v", err)

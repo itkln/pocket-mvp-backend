@@ -33,9 +33,10 @@ ownership, and the path for extracting a module into a microservice.
 ## Public venue reads
 
 `GET /api/v1/public/venues/{venueID}` returns a current, published venue read
-model; `GET /api/v1/public/venues?ids=...` accepts up to 50 comma-separated
-UUIDs for bulk hydration. The Spots saved-venues API (E-07) was removed on
-2026-11-10: Pocket Dish has no saved places. Its `spots_saved_venues` table is
+model. Pocket Dish opens one venue by link or table QR, so the Spots marketplace
+pieces were removed on 2026-11-10: the saved-venues API (E-07), the venue search
+`GET /api/v1/public/venues` and the never-routed service appointments. Their
+tables (`spots_saved_venues`, `bookable_services`, `reservation_services`) are
 kept until a decision on the stored data.
 
 ## Run the complete stack

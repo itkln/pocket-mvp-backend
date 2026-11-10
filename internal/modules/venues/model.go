@@ -60,25 +60,6 @@ type PublicVenue struct {
 	CreatedAt       time.Time `json:"created_at"`
 }
 
-type PublicVenueQuery struct {
-	City     string
-	Search   string
-	Category string
-	Filter   string
-	IDs      []string
-	Page     int
-	PageSize int
-}
-
-type PublicVenuePage struct {
-	Venues     []PublicVenue `json:"venues"`
-	Page       int           `json:"page"`
-	PageSize   int           `json:"page_size"`
-	Total      int           `json:"total"`
-	TotalPages int           `json:"total_pages"`
-	HasNext    bool          `json:"has_next"`
-}
-
 // PublicMenu exposes only visible, available items of a published venue.
 type PublicMenuItem struct {
 	ID             string   `json:"id"`
