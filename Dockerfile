@@ -13,7 +13,9 @@ ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
     -ldflags="-s -w -X pocket-mvp-backend/internal/buildinfo.Version=${VERSION} -X pocket-mvp-backend/internal/buildinfo.Commit=${COMMIT} -X pocket-mvp-backend/internal/buildinfo.BuildDate=${BUILD_DATE}" \
-    -o /out/pocket-api ./cmd/api
+    -o /out/pocket-api ./cmd/api \
+    && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+    -o /out/pocket-seed ./cmd/seed
 
 FROM alpine:3.21 AS runner
 WORKDIR /app
@@ -22,6 +24,7 @@ RUN apk add --no-cache ca-certificates tzdata \
     && adduser -S -D -H -u 10001 -G pocket pocket
 
 COPY --from=builder /out/pocket-api /app/pocket-api
+COPY --from=builder /out/pocket-seed /app/pocket-seed
 
 USER pocket
 EXPOSE 8080

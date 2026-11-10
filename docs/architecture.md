@@ -1,86 +1,180 @@
 # Backend architecture
 
-Pocket is a modular monolith. It deploys as one process today, while its code is
-organized around business capabilities rather than technical layers or user
-roles. This keeps the MVP operationally simple without coupling all features to
-one service object.
+Pocket is a modular monolith organized around business domains. It deploys as
+one process for the MVP, but each domain has explicit ports around persistence
+and authorization. This keeps the current runtime simple and makes a later
+service extraction a deployment decision rather than a full rewrite.
 
 ## Dependency direction
 
 ```text
 cmd/api
-  -> httpapi contracts and handlers
-  -> modules/* services
-  -> access policies and shared platform packages
-  -> PostgreSQL
+  -> bootstrap (composition root)
+    -> httpapi (chi routes and transport contracts)
+    -> modules/* services (use cases and business rules)
+      -> repository interfaces and policy interfaces
+        <- PostgreSQL repository adapters and access policies
 ```
 
-Domain modules under `internal/modules` must not import one another. The rule is
-enforced by `internal/architecture/modules_test.go`. Cross-domain composition
-happens only in `cmd/api` and `httpapi`.
+Dependencies point inward. A service can depend on a repository interface, but
+it cannot depend on `pgx`, HTTP, cookies, or another domain module.
+
+The rules are checked by `internal/architecture/modules_test.go`:
+
+- domain modules cannot import one another;
+- PostgreSQL imports inside a domain are limited to
+  `repository_*_postgres.go`; services cannot import the shared `orderstore` adapter either.
+
+## Package responsibilities
+
+### `cmd/api`
+
+Owns process lifecycle only: configuration, database connection, HTTP server,
+signals, and graceful shutdown.
+
+### `internal/bootstrap`
+
+Is the composition root. It constructs PostgreSQL adapters, policies, services,
+and the HTTP handler. Concrete dependencies should be wired here rather than in
+handlers or domain services.
+
+### `internal/httpapi`
+
+Owns the public HTTP boundary:
+
+- `chi` route definitions and middleware;
+- request decoding and response encoding;
+- cookies, status codes, and stable error envelopes;
+- small service interfaces used by handlers.
+
+Each HTTP method is registered with its own action-oriented handler. Handlers
+must not dispatch requests with `switch r.Method`; `chi` owns method routing.
+
+The `/api/v1` routes and JSON contracts remain unchanged when internal modules
+are reorganized.
+
+### `internal/modules/<domain>`
+
+Each bounded context follows the same shape:
+
+```text
+model.go                  domain inputs and outputs
+service.go                use cases, validation, business policy
+repository.go             persistence port, when shared records are needed
+repository_postgres.go    PostgreSQL adapter and transactions
+<feature>.go              larger use cases split by capability
+```
+
+Repository interfaces live beside the service that consumes them. This follows
+the dependency inversion rule and keeps a future remote adapter possible without
+changing the service.
 
 ## Bounded contexts
 
 | Module | Owns |
 | --- | --- |
-| `identity` | Accounts, credentials, sessions, login throttling |
+| `identity` | Accounts, encrypted personal data, credentials, sessions, login throttling |
 | `venues` | Venue profile and lifecycle |
 | `catalog` | Menu categories, items, prices, availability, images |
 | `workforce` | Invitations, venue roles, staff lifecycle |
 | `ordering` | Orders and order status transitions |
+| `dinein` | Table QR capability, guest orders and venue-scoped receipt history |
+| `reservations` | Availability holds, booking confirmation, preorders and customer cancellation |
 | `feedback` | Reviews and venue replies |
 | `billing` | Payments and workspace subscriptions |
 | `floorplan` | Editable venue layout document |
 | `reporting` | Read-only owner dashboard projection |
 
-Each module owns its request models, response models, validation, and SQL. The
-HTTP layer depends on small interfaces declared in `httpapi/contracts.go`; it
-does not depend on concrete service types.
+Modules do not call one another directly. Cross-domain composition happens in
+`bootstrap`, while shared authorization reads are exposed through narrow
+interfaces.
 
 ## Shared policies
 
-`access.VenueAuthorizer` is the current ownership policy for venue-scoped
-operations. Modules depend only on its `RequireOwner` method. When a module is
-extracted, this implementation can be replaced by signed claims, an RPC check,
-or a local ownership projection.
+`access.VenueAuthorizer` implements the access policy for venue-scoped
+operations. Modules ask for a capability — `ManageOrders`, `ManageMenu`,
+`ManageFloor` or `ManageVenue` — through `Require`, never for a role; the role
+to capability map lives in `access/policy.go` (owner: all; manager: orders,
+menu, floor; waiter: orders). A user without the capability gets the same 404
+as a stranger. It can later be replaced by signed claims, an RPC client, or a
+local membership projection.
 
-`access.CapabilityReader` keeps identity from querying venue and workforce data
-directly. It builds the current account capability projection behind an
-interface consumed by the identity module.
+`access.CapabilityReader` provides identity with an account capability
+projection without making identity import venue or workforce packages.
 
-`appfault` contains the small set of transport-independent errors shared by the
-business modules. HTTP maps them to stable status codes and response envelopes.
+`appfault` contains transport-independent errors shared by business modules.
+The HTTP layer maps them to status codes and response envelopes.
 
 ## Database ownership
 
-All modules currently share one PostgreSQL cluster because transactions and
-operations are still local to the MVP. Tables nevertheless have a clear logical
-owner. New code must access a table only from its owning module, except for
-explicit read projections in `access` and `reporting`.
+All modules currently share one PostgreSQL cluster. Tables still have a logical
+owner, and command-side SQL belongs in that owner's PostgreSQL adapter.
 
-Do not add cross-module SQL joins to command paths. Reporting joins are allowed
-for read models. As scale requires it, replace them with projections populated
-from domain events.
+Cross-domain joins are reserved for explicit read models such as `reporting` and
+access projections. New command paths should communicate through ports or
+events instead of adding cross-domain joins.
+
+The `spots_saved_venues` table of the removed Spots favorites module has no
+code owner; it is kept until a decision on the stored data.
+
+Transactions belong in repository adapters. Validation, password hashing,
+encryption, and decisions such as subscription limits stay in services.
+
+### Current integration seams
+
+The MVP still has a few deliberate same-database integrations:
+
+- venue onboarding promotes the account to `venue_owner`;
+- billing reads the owner's active venue count before changing a plan;
+- floor plans are stored in the venue settings document;
+- `dinein` is the explicit table-order integration adapter: it normalizes a saved
+  floor-plan table when issuing an owner QR and atomically validates its capability,
+  snapshots menu items, and appends an order to the open bill. The public service
+  only exposes the table context and the requesting guest's receipt. It imports no
+  other business module. See `docs/table-qr-ordering.md`;
+- reporting and access build cross-domain read projections.
+
+These dependencies are behind repository or policy ports. During extraction,
+replace the first three with events, a dedicated projection, or a remote adapter
+without changing the calling service.
+
+### Shared order persistence
+
+`internal/orderstore` implements narrow, transaction-scoped PostgreSQL operations
+used by dine-in orders and reservation preorders: locked menu reads, immutable
+item snapshots and pending tips. It imports no domain modules and never commits
+or opens a transaction. Channel-specific policy stays in the calling module.
+`internal/database` contains connection/migration infrastructure only.
+
+The dine-in adapter separates QR normalization, order creation, receipt reading
+and history into feature files. Reservation creation and hold confirmation share
+one preorder pricing/writing path. Vendor status changes separate lock/check,
+status update and cancellation accounting. Shared receipt projections have a
+single scanner to keep field ordering consistent.
+
+Business rules, lock order, idempotency compatibility and current payment
+limitations are documented in [order-business-rules.md](order-business-rules.md).
+Measured query improvements and validation are in
+[backend-refactoring-results.md](backend-refactoring-results.md).
 
 ## Extraction path
 
-To turn a module into a microservice:
+To extract a domain into a microservice:
 
-1. Give the module its own database schema and migration ownership.
-2. Add an outbox for events produced by its state changes.
-3. Move the module directory and its models into a new service repository.
-4. Implement the existing `httpapi` interface with an HTTP or gRPC client.
-5. Replace cross-domain reads with local projections built from events.
-6. Route external traffic directly only after compatibility and observability
-   are in place.
-
-The public `/api/v1` routes and JSON envelopes are intentionally unchanged by
-the modularization, so extraction can happen behind the existing API gateway.
+1. Give it migration ownership and, if needed, a dedicated schema.
+2. Add an outbox for events produced by state changes.
+3. Move the domain package and its PostgreSQL adapter into a service repository.
+4. Add an HTTP or gRPC adapter implementing the existing repository/service
+   port required by the modular monolith.
+5. Replace shared reads with local projections populated from events.
+6. Move traffic only after compatibility, retries, tracing, and operational
+   ownership are in place.
 
 ## Adding functionality
 
-- Put business rules and persistence in the module that owns the capability.
-- Expose the smallest interface required by the transport layer.
-- Keep HTTP parsing, cookies, status codes, and response envelopes in `httpapi`.
-- Compose concrete implementations only in `cmd/api`.
-- Add a new module instead of extending an unrelated service with more methods.
+- Put business decisions in the owning module's service.
+- Put SQL and transaction boundaries in its repository adapter.
+- Keep HTTP concerns in `httpapi`.
+- Wire concrete implementations only in `bootstrap`.
+- Introduce a new bounded context instead of growing an unrelated service.
+- Add an architecture rule when a new dependency boundary matters.

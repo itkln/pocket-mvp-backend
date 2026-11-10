@@ -2,105 +2,125 @@ package ordering
 
 import (
 	"context"
-	"errors"
-	"regexp"
+	"strings"
+	"unicode/utf8"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"pocket-mvp-backend/internal/lifecycle"
+	"pocket-mvp-backend/internal/validate"
 
 	"pocket-mvp-backend/internal/appfault"
 )
 
-var orderStatusPattern = regexp.MustCompile(`^(new|accepted|preparing|ready|served|completed|cancelled)$`)
-
 type VenueAuthorizer interface {
-	RequireOwner(context.Context, string, string) error
+	OrderRole(context.Context, string, string) (string, error)
 }
 
 type Service struct {
-	db         *pgxpool.Pool
+	repository Repository
 	authorizer VenueAuthorizer
 }
 
-func NewService(db *pgxpool.Pool, authorizer VenueAuthorizer) *Service {
-	return &Service{db: db, authorizer: authorizer}
+func NewService(repository Repository, authorizer VenueAuthorizer) *Service {
+	return &Service{repository: repository, authorizer: authorizer}
 }
 
 func (s *Service) List(ctx context.Context, ownerID, venueID string) ([]Order, error) {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
-		return nil, err
-	}
-	rows, err := s.db.Query(ctx, `
-		SELECT o.id::text, o.order_number, o.channel,
-		       CASE
-		         WHEN t.identifier IS NOT NULL THEN 'Стол ' || t.identifier
-		         WHEN o.channel = 'pickup' THEN 'Самовывоз'
-		         ELSE 'Онлайн'
-		       END,
-		       COALESCE(o.guest_name, ''), o.total_minor, o.currency, o.status,
-		       COALESCE(o.notes, ''), o.created_at
-		FROM orders o
-		LEFT JOIN venue_tables t ON t.id = o.venue_table_id
-		WHERE o.venue_id = $1
-		ORDER BY o.created_at DESC
-		LIMIT 200`, venueID)
+	role, err := s.authorizer.OrderRole(ctx, ownerID, venueID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	result := []Order{}
-	for rows.Next() {
-		order, scanErr := scanOrder(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		result = append(result, order)
+	if !roleMaySet(role, "") {
+		return nil, appfault.ErrForbidden
 	}
-	return result, rows.Err()
+	return s.repository.List(ctx, venueID)
 }
 
-func (s *Service) UpdateStatus(ctx context.Context, ownerID, venueID, orderID, status string) (Order, error) {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+// Only dishes attached to confirmed reservations appear in a customer's preorder history.
+
+func (s *Service) UpdateStatus(ctx context.Context, ownerID, venueID, orderID, status, expected string, details ...StatusChange) (Order, error) {
+	_, err := s.authorizer.OrderRole(ctx, ownerID, venueID)
+	if err != nil {
 		return Order{}, err
 	}
-	if !orderStatusPattern.MatchString(status) {
+	if !isSettableStatus(status) || !isSettableStatus(expected) {
 		return Order{}, appfault.ErrInvalidInput
 	}
-
-	var order Order
-	err := s.db.QueryRow(ctx, `
-		UPDATE orders o
-		SET status = $3,
-		    completed_at = CASE WHEN $3 IN ('completed', 'cancelled') THEN now() ELSE completed_at END
-		WHERE o.id = $2 AND o.venue_id = $1
-		RETURNING o.id::text, o.order_number, o.channel,
-		          CASE
-		            WHEN o.venue_table_id IS NOT NULL THEN 'Стол ' || COALESCE((SELECT identifier FROM venue_tables WHERE id = o.venue_table_id), '')
-		            WHEN o.channel = 'pickup' THEN 'Самовывоз'
-		            ELSE 'Онлайн'
-		          END,
-		          COALESCE(o.guest_name, ''), o.total_minor, o.currency, o.status,
-		          COALESCE(o.notes, ''), o.created_at`, venueID, orderID, status,
-	).Scan(
-		&order.ID, &order.Number, &order.Channel, &order.Source, &order.GuestName,
-		&order.TotalMinor, &order.Currency, &order.Status, &order.Notes, &order.CreatedAt,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Order{}, appfault.ErrNotFound
+	change := StatusChange{ExpectedStatus: expected, ActorID: ownerID}
+	if len(details) > 0 {
+		change.Reason = details[0].Reason
+		change.Comment = strings.TrimSpace(details[0].Comment)
 	}
+	if err := validateCancellation(status, change); err != nil {
+		return Order{}, err
+	}
+	order, err := s.repository.UpdateStatus(ctx, venueID, orderID, status, change)
 	return order, err
 }
 
-type orderScanner interface {
-	Scan(...any) error
+// AllowedActions is advisory; mutation authorization is repeated under transaction locks.
+func (o *Order) applyRole(role string) {
+	o.AllowedActions = []string{}
+	if roleMaySet(role, lifecycle.OrderCancelled) && !o.cancelAllowed && !isFinalStatus(o.Status) {
+		o.CancellationBlocked = "payment_or_closed_bill"
+	}
+	if o.Status == lifecycle.OrderDraft || isFinalStatus(o.Status) {
+		return
+	}
+	for _, target := range settableStatuses[1:] {
+		if target == o.Status || (target == lifecycle.OrderCancelled && !o.cancelAllowed) || (target != lifecycle.OrderCancelled && o.ReservationStatus == lifecycle.ReservationCancelled) {
+			continue
+		}
+		if validateTransition(role, o.Channel, o.Status, target, o.Status) == nil {
+			o.AllowedActions = append(o.AllowedActions, target)
+		}
+	}
+}
+func (s *Service) ListPage(ctx context.Context, userID, venueID string, query Query) (Page, error) {
+	if err := query.normalize(venueID); err != nil {
+		return Page{}, err
+	}
+	role, err := s.authorizer.OrderRole(ctx, userID, venueID)
+	if err != nil {
+		return Page{}, err
+	}
+	page, err := s.repository.ListPage(ctx, venueID, query)
+	if err != nil {
+		return Page{}, err
+	}
+	for i := range page.Orders {
+		page.Orders[i].applyRole(role)
+	}
+	return page, nil
+}
+func (s *Service) Get(ctx context.Context, userID, venueID, orderID string) (Order, error) {
+	if !validate.UUID(venueID) || !validate.UUID(orderID) {
+		return Order{}, appfault.ErrInvalidInput
+	}
+	role, err := s.authorizer.OrderRole(ctx, userID, venueID)
+	if err != nil {
+		return Order{}, err
+	}
+	order, err := s.repository.Get(ctx, venueID, orderID)
+	if err != nil {
+		return Order{}, err
+	}
+	order.applyRole(role)
+	return order, nil
 }
 
-func scanOrder(row orderScanner) (Order, error) {
-	var order Order
-	err := row.Scan(
-		&order.ID, &order.Number, &order.Channel, &order.Source, &order.GuestName,
-		&order.TotalMinor, &order.Currency, &order.Status, &order.Notes, &order.CreatedAt,
-	)
-	return order, err
+func validateCancellation(status string, c StatusChange) error {
+	if utf8.RuneCountInString(c.Comment) > 500 {
+		return appfault.ErrInvalidInput
+	}
+	if status != lifecycle.OrderCancelled {
+		if c.Reason != "" || c.Comment != "" {
+			return appfault.ErrInvalidInput
+		}
+		return nil
+	}
+	switch c.Reason {
+	case "guest_request", "unavailable", "duplicate", "kitchen_issue", "other":
+		return nil
+	}
+	return appfault.ErrInvalidInput
 }

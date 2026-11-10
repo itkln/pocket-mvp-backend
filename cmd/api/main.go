@@ -10,22 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"pocket-mvp-backend/internal/access"
+	"pocket-mvp-backend/internal/bootstrap"
 	"pocket-mvp-backend/internal/buildinfo"
 	"pocket-mvp-backend/internal/config"
 	"pocket-mvp-backend/internal/database"
-	"pocket-mvp-backend/internal/httpapi"
-	"pocket-mvp-backend/internal/modules/billing"
-	"pocket-mvp-backend/internal/modules/catalog"
-	"pocket-mvp-backend/internal/modules/feedback"
-	"pocket-mvp-backend/internal/modules/floorplan"
-	"pocket-mvp-backend/internal/modules/identity"
-	"pocket-mvp-backend/internal/modules/ordering"
-	"pocket-mvp-backend/internal/modules/reporting"
-	"pocket-mvp-backend/internal/modules/venues"
-	"pocket-mvp-backend/internal/modules/workforce"
-	"pocket-mvp-backend/internal/notifications"
-	"pocket-mvp-backend/internal/security"
 )
 
 func main() {
@@ -50,47 +38,11 @@ func main() {
 	}
 	defer db.Close()
 
-	protector, err := security.NewDataProtector(cfg.DataEncryptionKey, cfg.DataLookupKey)
+	handler, err := bootstrap.NewHTTPHandler(db, cfg, logger)
 	if err != nil {
-		logger.Error("initialize data protection", "error", err)
+		logger.Error("initialize application", "error", err)
 		os.Exit(1)
 	}
-	venueAuthorizer := access.NewVenueAuthorizer(db)
-	capabilityReader := access.NewCapabilityReader(db)
-	resetSender := notifications.NewPasswordResetSender(logger, cfg.SMTPAddress, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
-	identityService, err := identity.NewService(db, protector, capabilityReader, cfg.SessionTTL, identity.PasswordResetOptions{
-		Sender: resetSender, BaseURL: cfg.AppBaseURL, TTL: cfg.PasswordResetTTL,
-	})
-	if err != nil {
-		logger.Error("initialize authentication", "error", err)
-		os.Exit(1)
-	}
-	venueService := venues.NewService(db)
-	catalogService := catalog.NewService(db, venueAuthorizer)
-	workforceService := workforce.NewService(db, venueAuthorizer)
-	orderingService := ordering.NewService(db, venueAuthorizer)
-	feedbackService := feedback.NewService(db, venueAuthorizer)
-	billingService := billing.NewService(db, venueAuthorizer)
-	floorPlanService := floorplan.NewService(db, venueAuthorizer)
-	reportingService := reporting.NewService(db, venueAuthorizer)
-
-	handler := httpapi.New(httpapi.Dependencies{
-		Database:       db,
-		Logger:         logger,
-		AllowedOrigins: cfg.AllowedOrigins,
-		Build:          buildinfo.Current(),
-		Identity:       identityService,
-		Venues:         venueService,
-		Catalog:        catalogService,
-		Workforce:      workforceService,
-		Ordering:       orderingService,
-		Feedback:       feedbackService,
-		Billing:        billingService,
-		FloorPlan:      floorPlanService,
-		Reporting:      reportingService,
-		SessionCookie:  cfg.SessionCookieName,
-		SessionSecure:  cfg.CookieSecure,
-	})
 	server := &http.Server{
 		Addr:              cfg.HTTPAddress,
 		Handler:           handler,

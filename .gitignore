@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 .idea/
+.DS_Store
 bin/
 coverage.out
 tmp/

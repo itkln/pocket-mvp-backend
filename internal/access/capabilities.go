@@ -28,7 +28,7 @@ func (r *CapabilityReader) ListCapabilities(ctx context.Context, userID string) 
 	}
 	if err := r.db.QueryRow(ctx, `
 		SELECT EXISTS (
-			SELECT 1 FROM venue_staff WHERE user_id = $1 AND status = 'active'
+			SELECT 1 FROM venue_staff s JOIN venues v ON v.id=s.venue_id WHERE s.user_id = $1 AND s.status = 'active' AND s.removed_at IS NULL AND v.deleted_at IS NULL
 		)`, userID).Scan(&worksAtVenue); err != nil {
 		return nil, fmt.Errorf("load staff capability: %w", err)
 	}

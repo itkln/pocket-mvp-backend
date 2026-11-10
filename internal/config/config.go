@@ -25,6 +25,7 @@ type Config struct {
 	SessionTTL             time.Duration
 	CookieSecure           bool
 	AppBaseURL             string
+	DishAppBaseURL         string
 	PasswordResetTTL       time.Duration
 	SMTPAddress            string
 	SMTPUsername           string
@@ -76,6 +77,13 @@ func Load() (Config, error) {
 	if environment != "development" && smtpAddress == "" {
 		return Config{}, errors.New("SMTP_ADDRESS is required outside development")
 	}
+	dishAppBaseURL := strings.TrimSpace(os.Getenv("DISH_APP_BASE_URL"))
+	if dishAppBaseURL == "" {
+		if environment != "development" {
+			return Config{}, errors.New("DISH_APP_BASE_URL is required outside development")
+		}
+		dishAppBaseURL = "http://localhost:3001"
+	}
 
 	return Config{
 		Environment:            environment,
@@ -91,7 +99,8 @@ func Load() (Config, error) {
 		SessionCookieName:      stringEnv("SESSION_COOKIE_NAME", "pocket_session"),
 		SessionTTL:             sessionTTL,
 		CookieSecure:           cookieSecure,
-		AppBaseURL:             stringEnv("APP_BASE_URL", "http://localhost:3000"),
+		AppBaseURL:             stringEnv("VENDOR_APP_BASE_URL", stringEnv("APP_BASE_URL", "http://localhost:3000")),
+		DishAppBaseURL:         dishAppBaseURL,
 		PasswordResetTTL:       passwordResetTTL,
 		SMTPAddress:            smtpAddress,
 		SMTPUsername:           strings.TrimSpace(os.Getenv("SMTP_USERNAME")),

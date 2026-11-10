@@ -3,18 +3,18 @@ package billing
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"pocket-mvp-backend/internal/access"
 )
 
 type VenueAuthorizer interface {
-	RequireOwner(context.Context, string, string) error
+	Require(context.Context, string, string, access.Capability) error
 }
 
 type Service struct {
-	db         *pgxpool.Pool
+	repository Repository
 	authorizer VenueAuthorizer
 }
 
-func NewService(db *pgxpool.Pool, authorizer VenueAuthorizer) *Service {
-	return &Service{db: db, authorizer: authorizer}
+func NewService(repository Repository, authorizer VenueAuthorizer) *Service {
+	return &Service{repository: repository, authorizer: authorizer}
 }

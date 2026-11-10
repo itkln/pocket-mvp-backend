@@ -1,0 +1,194 @@
+package reservations
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"pocket-mvp-backend/internal/lifecycle"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/gratuity"
+)
+
+const holdTTL = 10 * time.Minute
+
+func (r *PostgresRepository) Hold(ctx context.Context, venueID string, input CreateInput, hash string, slot Slot) (HoldResult, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return HoldResult{}, err
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, venueID+":"+input.IdempotencyKey); err != nil {
+		return HoldResult{}, err
+	}
+	var existing HoldResult
+	var oldHash, status string
+	err = tx.QueryRow(ctx, `SELECT id::text, request_hash, status, COALESCE(hold_expires_at, 'epoch'::timestamptz) FROM reservations
+		WHERE venue_id = $1 AND idempotency_key = $2`, venueID, input.IdempotencyKey).
+		Scan(&existing.ID, &oldHash, &status, &existing.ExpiresAt)
+	if err == nil {
+		if oldHash != hash {
+			return HoldResult{}, appfault.ErrConflict
+		}
+		if status == lifecycle.ReservationConfirmed {
+			return existing, nil
+		}
+		if status != lifecycle.ReservationPending {
+			return HoldResult{}, ErrHoldExpired
+		}
+		if !existing.ExpiresAt.After(time.Now()) {
+			if _, err = tx.Exec(ctx, `UPDATE reservations SET status = 'cancelled' WHERE id = $1`, existing.ID); err != nil {
+				return HoldResult{}, err
+			}
+			if err = tx.Commit(ctx); err != nil {
+				return HoldResult{}, err
+			}
+			return HoldResult{}, ErrHoldExpired
+		}
+		return existing, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return HoldResult{}, err
+	}
+	if slot.TableID == "" {
+		return HoldResult{}, appfault.ErrConflict
+	}
+	// Expired pending rows must be cancelled before the exclusion constraint can release their slots.
+	if _, err = tx.Exec(ctx, `UPDATE reservations SET status = 'cancelled'
+		WHERE venue_id = $1 AND status = 'pending' AND hold_expires_at <= now()`, venueID); err != nil {
+		return HoldResult{}, err
+	}
+	err = tx.QueryRow(ctx, `WITH new_id AS (SELECT gen_random_uuid() AS id)
+		INSERT INTO reservations (id, venue_id, venue_table_id, customer_user_id, reservation_code,
+			guest_name, guest_email, guest_phone, guest_count, starts_at, ends_at, status,
+			notes, idempotency_key, request_hash, hold_expires_at)
+		SELECT id, $1, $2, NULLIF($3, '')::uuid, upper(substr(replace(id::text, '-', ''), 1, 10)),
+			$4, NULLIF($5, ''), NULLIF($6, ''), $7, $8, $9, 'pending', NULLIF($10, ''), $11, $12,
+			now() + $13 * interval '1 second' FROM new_id
+		RETURNING id::text, hold_expires_at`, venueID, slot.TableID, input.CustomerUserID,
+		input.GuestName, input.GuestEmail, input.GuestPhone, input.Guests, slot.StartsAt,
+		slot.EndsAt, input.Notes, input.IdempotencyKey, hash, int(holdTTL.Seconds())).
+		Scan(&existing.ID, &existing.ExpiresAt)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23P01" {
+			return HoldResult{}, appfault.ErrConflict
+		}
+		return HoldResult{}, appfault.MapWriteError(err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return HoldResult{}, appfault.MapWriteError(err)
+	}
+	return existing, nil
+}
+
+func (r *PostgresRepository) Confirm(ctx context.Context, venueID, holdID string, input CreateInput, holdHash, confirmationHash string) (Result, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	defer tx.Rollback(ctx)
+	var status, oldHoldHash, oldConfirmationHash, tableID string
+	var expiresAt time.Time
+	var result Result
+	err = tx.QueryRow(ctx, `SELECT status, request_hash, COALESCE(confirmation_hash, ''), COALESCE(hold_expires_at, 'epoch'::timestamptz),
+		venue_table_id::text, reservation_code, starts_at, guest_count
+		FROM reservations WHERE venue_id = $1 AND id = $2 AND idempotency_key = $3 FOR UPDATE`,
+		venueID, holdID, input.IdempotencyKey).
+		Scan(&status, &oldHoldHash, &oldConfirmationHash, &expiresAt,
+			&tableID, &result.Code, &result.StartsAt, &result.GuestCount)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Result{}, appfault.ErrNotFound
+	}
+	if err != nil {
+		return Result{}, err
+	}
+	if oldHoldHash != holdHash {
+		return Result{}, appfault.ErrConflict
+	}
+	if status == lifecycle.ReservationConfirmed {
+		if oldConfirmationHash != confirmationHash {
+			return Result{}, appfault.ErrConflict
+		}
+		found, _, ok, err := scanByKey(tx.QueryRow(ctx, byKeyQuery, venueID, input.IdempotencyKey))
+		if err != nil {
+			return Result{}, err
+		}
+		if !ok {
+			return Result{}, appfault.ErrNotFound
+		}
+		return found, nil
+	}
+	if status != lifecycle.ReservationPending {
+		return Result{}, ErrHoldExpired
+	}
+	if !expiresAt.After(time.Now()) {
+		if _, err = tx.Exec(ctx, `UPDATE reservations SET status = 'cancelled' WHERE id = $1`, holdID); err != nil {
+			return Result{}, err
+		}
+		if err = tx.Commit(ctx); err != nil {
+			return Result{}, err
+		}
+		return Result{}, ErrHoldExpired
+	}
+	if !result.StartsAt.Equal(input.StartsAt) || result.GuestCount != input.Guests {
+		return Result{}, appfault.ErrConflict
+	}
+	var preorderEnabled bool
+	err = tx.QueryRow(ctx, `SELECT currency, COALESCE((settings ->> 'preorder_enabled')::boolean, false)
+		FROM venues WHERE id = $1 AND status = 'active' AND deleted_at IS NULL
+		AND COALESCE(settings ->> 'public_category', 'restaurants') = 'restaurants'`, venueID).
+		Scan(&result.Currency, &preorderEnabled)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Result{}, appfault.ErrNotFound
+	}
+	if err != nil {
+		return Result{}, err
+	}
+	if len(input.Items) > 0 && !preorderEnabled {
+		return Result{}, ErrItemUnavailable
+	}
+	snapshots, subtotal, err := pricePreorder(ctx, tx, venueID, result.Currency, input)
+	if err != nil {
+		return Result{}, err
+	}
+	result.PreorderTotalMinor = subtotal
+	result.PreorderSubtotalMinor = result.PreorderTotalMinor
+	result.PreorderTipMinor, err = gratuity.Calculate(result.PreorderSubtotalMinor, input.Tip)
+	if err != nil {
+		return Result{}, err
+	}
+	result.PreorderTotalMinor += result.PreorderTipMinor
+	if input.ExpectedTotalMinor != nil && *input.ExpectedTotalMinor != result.PreorderTotalMinor {
+		return Result{}, ErrPriceChanged
+	}
+	if _, err = tx.Exec(ctx, `UPDATE reservations SET status = 'confirmed', hold_expires_at = NULL,
+		confirmation_hash = $2, guest_name = $3, guest_phone = NULLIF($4, ''),
+		guest_email = NULLIF($5, ''), notes = NULLIF($6, '') WHERE id = $1`, holdID, confirmationHash,
+		input.GuestName, input.GuestPhone, input.GuestEmail, input.Notes); err != nil {
+		return Result{}, appfault.MapWriteError(err)
+	}
+	result.ID = holdID
+	if err = insertPreorder(ctx, tx, venueID, tableID, input, &result, snapshots); err != nil {
+		return Result{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Result{}, appfault.MapWriteError(err)
+	}
+	return result, nil
+}
+
+func (r *PostgresRepository) GetConfirmed(ctx context.Context, venueID, reservationID, key string) (Result, error) {
+	result, _, found, err := scanByKey(r.db.QueryRow(ctx, byKeyQuery+` AND r.id = $3`, venueID, key, reservationID))
+	if err != nil {
+		return Result{}, err
+	}
+	if !found {
+		return Result{}, appfault.ErrNotFound
+	}
+	return result, nil
+}

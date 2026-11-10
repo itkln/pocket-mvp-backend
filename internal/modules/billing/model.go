@@ -1,16 +1,20 @@
 package billing
 
-import "time"
+import (
+	"time"
+
+	"pocket-mvp-backend/internal/money"
+)
 
 type Payment struct {
-	ID            string     `json:"id"`
-	Provider      string     `json:"provider"`
-	Status        string     `json:"status"`
-	AmountMinor   int        `json:"amount_minor"`
-	RefundedMinor int        `json:"refunded_minor"`
-	Currency      string     `json:"currency"`
-	PaidAt        *time.Time `json:"paid_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID            string      `json:"id"`
+	Provider      string      `json:"provider"`
+	Status        string      `json:"status"`
+	AmountMinor   money.Minor `json:"amount_minor"`
+	RefundedMinor money.Minor `json:"refunded_minor"`
+	Currency      string      `json:"currency"`
+	PaidAt        *time.Time  `json:"paid_at,omitempty"`
+	CreatedAt     time.Time   `json:"created_at"`
 }
 
 type Subscription struct {

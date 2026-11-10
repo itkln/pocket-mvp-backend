@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"runtime/debug"
 	"slices"
@@ -11,6 +10,7 @@ import (
 
 func New(deps Dependencies) http.Handler {
 	api := &API{
+		dishBaseURL:    deps.DishBaseURL,
 		database:       deps.Database,
 		logger:         deps.Logger,
 		allowedOrigins: deps.AllowedOrigins,
@@ -18,9 +18,12 @@ func New(deps Dependencies) http.Handler {
 		startedAt:      time.Now().UTC(),
 		identity:       deps.Identity,
 		venues:         deps.Venues,
+		availability:   deps.Availability,
+		reservations:   deps.Reservations,
 		catalog:        deps.Catalog,
 		workforce:      deps.Workforce,
 		ordering:       deps.Ordering,
+		dineIn:         deps.DineIn,
 		feedback:       deps.Feedback,
 		billing:        deps.Billing,
 		floorPlan:      deps.FloorPlan,
@@ -29,7 +32,7 @@ func New(deps Dependencies) http.Handler {
 		sessionSecure:  deps.SessionSecure,
 	}
 
-	return api.recoverPanic(api.requestLogger(api.securityHeaders(api.cors(api.routes()))))
+	return api.routes()
 }
 
 func (api *API) health(w http.ResponseWriter, _ *http.Request) {
@@ -72,7 +75,7 @@ func (api *API) cors(next http.Handler) http.Handler {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "origin_not_allowed"})
 				return
 			}
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Reservation-Key")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -128,10 +131,4 @@ type statusRecorder struct {
 func (w *statusRecorder) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
-}
-
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
 }

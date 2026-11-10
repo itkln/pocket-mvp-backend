@@ -2,170 +2,125 @@ package venues
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"pocket-mvp-backend/internal/lifecycle"
+	"pocket-mvp-backend/internal/validate"
 
+	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/security"
 )
 
-type Service struct {
-	db *pgxpool.Pool
+type VenueAuthorizer interface {
+	Require(context.Context, string, string, access.Capability) error
 }
 
-func NewService(db *pgxpool.Pool) *Service {
-	return &Service{db: db}
+type Service struct {
+	repository Repository
+	authorizer VenueAuthorizer
+}
+
+func NewService(repository Repository, authorizer VenueAuthorizer) *Service {
+	return &Service{repository: repository, authorizer: authorizer}
 }
 
 func (s *Service) List(ctx context.Context, ownerID string) ([]Venue, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT id::text, name, slug, COALESCE(description, ''), COALESCE(cuisine_type, ''),
-		       COALESCE(phone, ''), COALESCE(email, ''), address_line1, city,
-		       COALESCE(postal_code, ''), country_code, timezone, currency, status, settings, created_at
-		FROM venues
-		WHERE owner_user_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at`, ownerID)
+	return s.repository.List(ctx, ownerID)
+}
+
+func (s *Service) GetPublished(ctx context.Context, venueID string) (PublicVenue, error) {
+	if !validVenueID(venueID) {
+		return PublicVenue{}, appfault.ErrInvalidInput
+	}
+	return s.repository.GetPublished(ctx, venueID)
+}
+
+func (s *Service) ListPublishedMenu(ctx context.Context, venueID string) ([]PublicMenuCategory, error) {
+	if !validVenueID(venueID) {
+		return nil, appfault.ErrInvalidInput
+	}
+	published, err := s.repository.IsPublished(ctx, venueID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	result := []Venue{}
-	for rows.Next() {
-		venue, scanErr := scanVenue(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		result = append(result, venue)
+	if !published {
+		return nil, appfault.ErrNotFound
 	}
-	return result, rows.Err()
+	categories, err := s.repository.ListPublishedMenu(ctx, venueID)
+	if categories == nil && err == nil {
+		categories = []PublicMenuCategory{}
+	}
+	return categories, err
 }
+
+func (s *Service) ListPublishedReviews(ctx context.Context, venueID string) ([]PublicReview, error) {
+	if !validVenueID(venueID) {
+		return nil, appfault.ErrInvalidInput
+	}
+	published, err := s.repository.IsPublished(ctx, venueID)
+	if err != nil {
+		return nil, err
+	}
+	if !published {
+		return nil, appfault.ErrNotFound
+	}
+	reviews, err := s.repository.ListPublishedReviews(ctx, venueID)
+	if reviews == nil && err == nil {
+		reviews = []PublicReview{}
+	}
+	return reviews, err
+}
+
+func (s *Service) IsPublished(ctx context.Context, venueID string) (bool, error) {
+	if !validVenueID(venueID) {
+		return false, appfault.ErrInvalidInput
+	}
+	return s.repository.IsPublished(ctx, venueID)
+}
+
+func validVenueID(id string) bool { return validate.UUID(id) }
 
 func (s *Service) Create(ctx context.Context, ownerID string, input Input) (Venue, error) {
 	input = normalizeInput(input)
 	if !validInput(input) {
 		return Venue{}, appfault.ErrInvalidInput
 	}
-
 	slug, err := uniqueSlug(input.Name)
 	if err != nil {
 		return Venue{}, err
 	}
-	settings, err := json.Marshal(input.Settings)
-	if err != nil {
-		return Venue{}, appfault.ErrInvalidInput
-	}
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return Venue{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	row := tx.QueryRow(ctx, `
-		INSERT INTO venues (
-			owner_user_id, slug, name, description, cuisine_type, phone, email,
-			address_line1, city, postal_code, country_code, timezone, currency, status, settings
-		)
-		VALUES (
-			$1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), NULLIF($7, ''),
-			$8, $9, NULLIF($10, ''), $11, $12, $13, $14, $15
-		)
-		RETURNING id::text, name, slug, COALESCE(description, ''), COALESCE(cuisine_type, ''),
-		          COALESCE(phone, ''), COALESCE(email, ''), address_line1, city,
-		          COALESCE(postal_code, ''), country_code, timezone, currency, status, settings, created_at`,
-		ownerID, slug, input.Name, input.Description, input.CuisineType, input.Phone, input.Email,
-		input.Address, input.City, input.PostalCode, input.CountryCode, input.Timezone,
-		input.Currency, input.Status, settings,
-	)
-	venue, err := scanVenue(row)
-	if err != nil {
-		return Venue{}, appfault.MapWriteError(err)
-	}
-	if _, err = tx.Exec(ctx, `UPDATE users SET account_role = 'venue_owner' WHERE id = $1`, ownerID); err != nil {
-		return Venue{}, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return Venue{}, err
-	}
-	return venue, nil
+	return s.repository.Create(ctx, ownerID, slug, input)
 }
 
-func (s *Service) Update(ctx context.Context, ownerID, venueID string, input Input) (Venue, error) {
+// Get returns the full venue profile to those who may edit it.
+func (s *Service) Get(ctx context.Context, userID, venueID string) (Venue, error) {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageSettings); err != nil {
+		return Venue{}, err
+	}
+	return s.repository.Get(ctx, venueID)
+}
+
+func (s *Service) Update(ctx context.Context, userID, venueID string, input Input) (Venue, error) {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageSettings); err != nil {
+		return Venue{}, err
+	}
 	input = normalizeInput(input)
 	if !validInput(input) {
 		return Venue{}, appfault.ErrInvalidInput
 	}
-	settings, err := json.Marshal(input.Settings)
-	if err != nil {
-		return Venue{}, appfault.ErrInvalidInput
-	}
-
-	row := s.db.QueryRow(ctx, `
-		UPDATE venues
-		SET name = $3, description = NULLIF($4, ''), cuisine_type = NULLIF($5, ''),
-		    phone = NULLIF($6, ''), email = NULLIF($7, ''), address_line1 = $8,
-		    city = $9, postal_code = NULLIF($10, ''), country_code = $11,
-		    timezone = $12, currency = $13, status = $14,
-		    settings = settings || ($15::jsonb - 'floor_plan')
-		WHERE id = $2 AND owner_user_id = $1 AND deleted_at IS NULL
-		RETURNING id::text, name, slug, COALESCE(description, ''), COALESCE(cuisine_type, ''),
-		          COALESCE(phone, ''), COALESCE(email, ''), address_line1, city,
-		          COALESCE(postal_code, ''), country_code, timezone, currency, status, settings, created_at`,
-		ownerID, venueID, input.Name, input.Description, input.CuisineType, input.Phone,
-		input.Email, input.Address, input.City, input.PostalCode, input.CountryCode,
-		input.Timezone, input.Currency, input.Status, settings,
-	)
-	venue, err := scanVenue(row)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Venue{}, appfault.ErrNotFound
-	}
-	return venue, appfault.MapWriteError(err)
+	return s.repository.Update(ctx, venueID, input)
 }
 
-func (s *Service) Delete(ctx context.Context, ownerID, venueID string) error {
-	result, err := s.db.Exec(ctx, `
-		UPDATE venues
-		SET deleted_at = now(), status = 'closed'
-		WHERE id = $2 AND owner_user_id = $1 AND deleted_at IS NULL`, ownerID, venueID)
-	if err != nil {
+// Delete stays with the owner: managers edit the venue but may not remove it.
+func (s *Service) Delete(ctx context.Context, userID, venueID string) error {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageVenue); err != nil {
 		return err
 	}
-	if result.RowsAffected() == 0 {
-		return appfault.ErrNotFound
-	}
-	return nil
-}
-
-type venueScanner interface {
-	Scan(...any) error
-}
-
-func scanVenue(row venueScanner) (Venue, error) {
-	var venue Venue
-	var settings []byte
-	err := row.Scan(
-		&venue.ID, &venue.Name, &venue.Slug, &venue.Description, &venue.CuisineType,
-		&venue.Phone, &venue.Email, &venue.Address, &venue.City, &venue.PostalCode,
-		&venue.CountryCode, &venue.Timezone, &venue.Currency, &venue.Status, &settings,
-		&venue.CreatedAt,
-	)
-	if err != nil {
-		return Venue{}, err
-	}
-	if err := json.Unmarshal(settings, &venue.Settings); err != nil {
-		return Venue{}, fmt.Errorf("decode venue settings: %w", err)
-	}
-	if venue.Settings == nil {
-		venue.Settings = map[string]any{}
-	}
-	return venue, nil
+	return s.repository.Delete(ctx, venueID)
 }
 
 func normalizeInput(input Input) Input {
@@ -195,7 +150,7 @@ func normalizeInput(input Input) Input {
 		input.Currency = "EUR"
 	}
 	if input.Status == "" {
-		input.Status = "draft"
+		input.Status = lifecycle.VenueDraft
 	}
 	if input.Settings == nil {
 		input.Settings = map[string]any{}
@@ -204,9 +159,12 @@ func normalizeInput(input Input) Input {
 }
 
 func validInput(input Input) bool {
-	validStatus := regexp.MustCompile(`^(draft|active|paused|closed)$`).MatchString(input.Status)
-	return input.Name != "" && input.City != "" && len(input.CountryCode) == 2 && len(input.Currency) == 3 && validStatus
+	return input.Name != "" && input.City != "" && len(input.CountryCode) == 2 && len(input.Currency) == 3 &&
+		validate.OneOf(input.Status, lifecycle.VenueStatuses...)
 }
+
+// slugSeparators are the runs of characters a slug replaces with a dash.
+var slugSeparators = regexp.MustCompile(`[^a-z0-9]+`)
 
 func uniqueSlug(name string) (string, error) {
 	token, err := security.NewSessionToken()
@@ -219,7 +177,7 @@ func uniqueSlug(name string) (string, error) {
 	}
 	suffix := slugify(token)
 	if len(suffix) > 7 {
-		suffix = suffix[:7]
+		suffix = strings.TrimRight(suffix[:7], "-")
 	}
 	if suffix == "" {
 		return "", errors.New("failed to generate venue slug")
@@ -229,6 +187,30 @@ func uniqueSlug(name string) (string, error) {
 
 func slugify(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
-	value = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(value, "-")
+	value = slugSeparators.ReplaceAllString(value, "-")
 	return strings.Trim(value, "-")
+}
+
+// ListWorkplaces returns the venues a user works at. Those who may edit a venue get its full
+// profile; the others get operational context only, without private settings or owner contacts.
+func (s *Service) ListWorkplaces(ctx context.Context, userID string) ([]Venue, error) {
+	items, err := s.repository.ListWorkplaces(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for i, venue := range items {
+		if !access.Allows(venue.AccessRole, access.ManageSettings) {
+			items[i] = operationalView(venue)
+		}
+	}
+	return items, nil
+}
+
+func operationalView(venue Venue) Venue {
+	return Venue{
+		AccessRole: venue.AccessRole, ID: venue.ID, Name: venue.Name, Slug: venue.Slug,
+		Address: venue.Address, City: venue.City, CountryCode: venue.CountryCode,
+		Timezone: venue.Timezone, Currency: venue.Currency, Status: venue.Status,
+		Settings: map[string]any{},
+	}
 }

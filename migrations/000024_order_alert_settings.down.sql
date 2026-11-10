@@ -1,0 +1,1 @@
+DROP TABLE venue_order_alert_settings;

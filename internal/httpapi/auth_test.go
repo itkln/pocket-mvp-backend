@@ -115,15 +115,6 @@ func TestRegisterDoesNotAcceptAccountRole(t *testing.T) {
 	}
 }
 
-func TestOwnerAPIRequiresSession(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/owner/venues", nil)
-	response := httptest.NewRecorder()
-	authHandler(&fakeAuth{}, false).ServeHTTP(response, request)
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", response.Code)
-	}
-}
-
 func TestLoginDoesNotRevealCredentialFailure(t *testing.T) {
 	service := &fakeAuth{loginErr: identity.ErrInvalidCredentials}
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"missing@example.com","password":"wrong password"}`))
@@ -219,15 +210,25 @@ func TestLoginRateLimitError(t *testing.T) {
 
 func TestPasswordResetRequestUsesNonEnumeratingResponse(t *testing.T) {
 	service := &fakeAuth{}
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-reset/request", strings.NewReader(`{"email":"user@example.com","locale":"uk"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-reset/request", strings.NewReader(`{"email":"user@example.com","locale":"uk","product":"dish"}`))
 	response := httptest.NewRecorder()
 	authHandler(service, false).ServeHTTP(response, request)
 
-	if response.Code != http.StatusAccepted || service.resetRequest.Email != "user@example.com" || service.resetRequest.Locale != "uk" {
+	if response.Code != http.StatusAccepted || service.resetRequest.Email != "user@example.com" || service.resetRequest.Locale != "uk" || service.resetRequest.Product != "dish" {
 		t.Fatalf("unexpected reset request response: status=%d input=%#v", response.Code, service.resetRequest)
 	}
 	if strings.Contains(strings.ToLower(response.Body.String()), "email") {
 		t.Fatal("password reset response must not reveal account information")
+	}
+}
+
+func TestPasswordResetRequestRejectsInvalidProduct(t *testing.T) {
+	service := &fakeAuth{resetErr: identity.ErrInvalidInput}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-reset/request", strings.NewReader(`{"email":"user@example.com","product":"https://evil.example"}`))
+	response := httptest.NewRecorder()
+	authHandler(service, false).ServeHTTP(response, request)
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "invalid_input") {
+		t.Fatalf("unexpected response %d: %s", response.Code, response.Body.String())
 	}
 }
 

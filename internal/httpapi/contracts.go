@@ -6,18 +6,24 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"pocket-mvp-backend/internal/buildinfo"
+	"pocket-mvp-backend/internal/modules/availability"
 	"pocket-mvp-backend/internal/modules/billing"
 	"pocket-mvp-backend/internal/modules/catalog"
+	"pocket-mvp-backend/internal/modules/dinein"
 	"pocket-mvp-backend/internal/modules/feedback"
 	"pocket-mvp-backend/internal/modules/identity"
 	"pocket-mvp-backend/internal/modules/ordering"
 	"pocket-mvp-backend/internal/modules/reporting"
+	"pocket-mvp-backend/internal/modules/reservations"
 	"pocket-mvp-backend/internal/modules/venues"
 	"pocket-mvp-backend/internal/modules/workforce"
 )
+
+// ReadinessProbe reports whether the database is reachable; the HTTP layer needs nothing else from it.
+type ReadinessProbe interface {
+	Ping(context.Context) error
+}
 
 type IdentityService interface {
 	Register(context.Context, identity.RegisterInput) (identity.User, identity.Session, error)
@@ -35,9 +41,27 @@ type IdentityService interface {
 
 type VenueService interface {
 	List(context.Context, string) ([]venues.Venue, error)
+	ListWorkplaces(context.Context, string) ([]venues.Venue, error)
+	GetPublished(context.Context, string) (venues.PublicVenue, error)
+	ListPublishedMenu(context.Context, string) ([]venues.PublicMenuCategory, error)
+	ListPublishedReviews(context.Context, string) ([]venues.PublicReview, error)
 	Create(context.Context, string, venues.Input) (venues.Venue, error)
+	Get(context.Context, string, string) (venues.Venue, error)
 	Update(context.Context, string, string, venues.Input) (venues.Venue, error)
 	Delete(context.Context, string, string) error
+}
+
+type AvailabilityService interface {
+	Get(context.Context, string, string, int) (availability.Result, error)
+}
+
+type ReservationService interface {
+	ListCustomer(context.Context, string) ([]reservations.CustomerReservation, error)
+	CancelCustomer(context.Context, string, string) (reservations.CustomerReservation, error)
+	Create(context.Context, string, reservations.CreateInput) (reservations.Result, error)
+	Hold(context.Context, string, reservations.CreateInput) (reservations.HoldResult, error)
+	Confirm(context.Context, string, string, reservations.CreateInput) (reservations.Result, error)
+	GetConfirmed(context.Context, string, string, string) (reservations.Result, error)
 }
 
 type CatalogService interface {
@@ -54,6 +78,8 @@ type CatalogService interface {
 }
 
 type WorkforceService interface {
+	SendInvitation(context.Context, string, string, string) error
+	Invitation(context.Context, string, string, string, bool) (workforce.Invitation, error)
 	List(context.Context, string, string) ([]workforce.StaffMember, error)
 	Create(context.Context, string, string, workforce.StaffInput) (workforce.StaffMember, error)
 	Update(context.Context, string, string, string, workforce.StaffInput) (workforce.StaffMember, error)
@@ -61,8 +87,21 @@ type WorkforceService interface {
 }
 
 type OrderingService interface {
+	GetAlertSettings(context.Context, string, string) (ordering.AlertSettings, error)
+	SaveAlertSettings(context.Context, string, string, ordering.AlertSettings) (ordering.AlertSettings, error)
+	ListPage(context.Context, string, string, ordering.Query) (ordering.Page, error)
+	Get(context.Context, string, string, string) (ordering.Order, error)
 	List(context.Context, string, string) ([]ordering.Order, error)
-	UpdateStatus(context.Context, string, string, string, string) (ordering.Order, error)
+	UpdateStatus(context.Context, string, string, string, string, string, ...ordering.StatusChange) (ordering.Order, error)
+}
+
+type DineInService interface {
+	CurrentBill(context.Context, string) (*dinein.Bill, error)
+	OwnerQRCode(context.Context, string, string, string, bool) (dinein.QRCode, error)
+	Resolve(context.Context, string) (dinein.Table, error)
+	Create(context.Context, dinein.CreateInput) (dinein.Order, error)
+	Lookup(context.Context, string, string, ...dinein.HistoryInput) (dinein.Order, error)
+	History(context.Context, dinein.HistoryInput) (dinein.HistoryPage, error)
 }
 
 type FeedbackService interface {
@@ -86,15 +125,19 @@ type ReportingService interface {
 }
 
 type Dependencies struct {
-	Database       *pgxpool.Pool
+	DishBaseURL    string
+	Database       ReadinessProbe
 	Logger         *slog.Logger
 	AllowedOrigins []string
 	Build          buildinfo.Info
 	Identity       IdentityService
 	Venues         VenueService
+	Availability   AvailabilityService
+	Reservations   ReservationService
 	Catalog        CatalogService
 	Workforce      WorkforceService
 	Ordering       OrderingService
+	DineIn         DineInService
 	Feedback       FeedbackService
 	Billing        BillingService
 	FloorPlan      FloorPlanService
@@ -104,16 +147,20 @@ type Dependencies struct {
 }
 
 type API struct {
-	database       *pgxpool.Pool
+	dishBaseURL    string
+	database       ReadinessProbe
 	logger         *slog.Logger
 	allowedOrigins []string
 	build          buildinfo.Info
 	startedAt      time.Time
 	identity       IdentityService
 	venues         VenueService
+	availability   AvailabilityService
+	reservations   ReservationService
 	catalog        CatalogService
 	workforce      WorkforceService
 	ordering       OrderingService
+	dineIn         DineInService
 	feedback       FeedbackService
 	billing        BillingService
 	floorPlan      FloorPlanService
