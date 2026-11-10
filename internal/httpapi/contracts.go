@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"pocket-mvp-backend/internal/buildinfo"
 	"pocket-mvp-backend/internal/modules/availability"
 	"pocket-mvp-backend/internal/modules/billing"
@@ -21,6 +19,11 @@ import (
 	"pocket-mvp-backend/internal/modules/venues"
 	"pocket-mvp-backend/internal/modules/workforce"
 )
+
+// ReadinessProbe reports whether the database is reachable; the HTTP layer needs nothing else from it.
+type ReadinessProbe interface {
+	Ping(context.Context) error
+}
 
 type IdentityService interface {
 	Register(context.Context, identity.RegisterInput) (identity.User, identity.Session, error)
@@ -122,7 +125,7 @@ type ReportingService interface {
 
 type Dependencies struct {
 	DishBaseURL    string
-	Database       *pgxpool.Pool
+	Database       ReadinessProbe
 	Logger         *slog.Logger
 	AllowedOrigins []string
 	Build          buildinfo.Info
@@ -144,7 +147,7 @@ type Dependencies struct {
 
 type API struct {
 	dishBaseURL    string
-	database       *pgxpool.Pool
+	database       ReadinessProbe
 	logger         *slog.Logger
 	allowedOrigins []string
 	build          buildinfo.Info
