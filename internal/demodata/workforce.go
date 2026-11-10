@@ -42,8 +42,8 @@ func workforceMembers(venueID string) []staffSeed {
 	return []staffSeed{
 		{ID: "50000000-0000-4000-8000-000000000001", Name: "София Марек", Email: "sofia@pocket.local", Role: "waiter", Status: "active"},
 		{ID: "50000000-0000-4000-8000-000000000002", Name: "Адам Ковач", Email: "adam@pocket.local", Role: "manager", Status: "active"},
-		{ID: "50000000-0000-4000-8000-000000000003", Name: "Лукас Новак", Email: "lukas@pocket.local", Role: "kitchen", Status: "inactive"},
+		{ID: "50000000-0000-4000-8000-000000000003", Name: "Лукас Новак", Email: "lukas@pocket.local", Role: "waiter", Status: "inactive"},
 		{ID: "50000000-0000-4000-8000-000000000004", Name: "Эма Варга", Email: "ema@pocket.local", Role: "waiter", Status: "invited"},
-		{ID: "50000000-0000-4000-8000-000000000005", Name: "Петер Грубер", Email: "peter@pocket.local", Role: "viewer", Status: "active"},
+		{ID: "50000000-0000-4000-8000-000000000005", Name: "Петер Грубер", Email: "peter@pocket.local", Role: "waiter", Status: "active"},
 	}
 }

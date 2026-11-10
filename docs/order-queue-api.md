@@ -8,18 +8,18 @@ server for the venue in the URL. Both prefixes use the same ordering service:
 
 ## List
 
-`GET {prefix}?scope=active&status=new,accepted&channel=dine_in&table_id={uuid}&limit=50`
+`GET {prefix}?scope=active&status=new,preparing&channel=dine_in&table_id={uuid}&limit=50`
 
 | Parameter | Contract |
 | --- | --- |
 | `scope` | `active` (default) or `history` |
 | `status` | Optional comma-separated statuses; repeated parameters also supported |
-| `channel` | Optional `dine_in`, `preorder`, `online`, `pickup`; the latter two preserve existing data compatibility, not new MVP flows |
+| `channel` | Optional `dine_in`, `preorder`, `online`; `online` preserves existing data compatibility, not a new MVP flow. Pickup was removed on 2026-11-10 |
 | `table_id` | Optional UUID of the table, not its display number |
 | `limit` | Integer 1–100; default 50 |
 | `cursor` | Opaque `next_cursor` from the previous response, used with the same filters and venue |
 
-Active: `new`, `accepted`, `preparing`, `ready`, `served`.
+Active: `new`, `preparing`, `served`.
 History: `completed`, `cancelled`. Drafts are excluded from both lists and details.
 Statuses outside the selected scope are invalid (422), not silently mixed in.
 
@@ -57,15 +57,12 @@ Shared operational fields:
 - `items`: ordered immutable purchase snapshots, including `id`, `name`,
   `quantity`, item `notes` and item `status`.
 
-Owner, manager, waiter and viewer also receive:
+Owner, manager and waiter receive:
 
 - `currency`, `total_minor`, `tip_minor`, `bill_id`;
 - `guest_name`, `guest_phone`, `guest_count`, `reservation_code`;
 - item `unit_price_minor` and `total_minor` (integer minor currency units).
 
-Kitchen responses omit financial fields, bill IDs, guest names/contact details
-and reservation codes on list, detail and PATCH. Table and reservation UUIDs,
-visit time, dish instructions and quantities remain available for preparation.
 Optional associations can be absent; `placed_at` and `completed_at` are nullable.
 All timestamps are RFC 3339. `updated_at` is the latest row update, not a promised
 cooking deadline; we do not invent ETA, payment status or historical per-stage
@@ -74,17 +71,15 @@ timestamps that were never recorded.
 ## Actions and authorization
 
 `allowed_actions` reuses the V-ORD-01 transition/role policy. It excludes no-op
-replays and forbidden transitions. Final orders and viewer accounts get `[]`.
+replays and forbidden transitions. Final orders get `[]`.
 Cancellation is excluded when a linked bill is not open, there is a nonfailed,
 noncancelled payment, or paid tips. A cancelled reservation disallows progress.
 Actions are advisory: `PATCH {prefix}/{orderID}` still checks current membership,
 locks the order/bill, validates the transition and requires `expected_status`.
 The PATCH response uses the same detailed role-specific order contract.
 
-- Owner/manager: legal progress and cancellation.
-- Waiter: accept and serve when those are the next legal steps.
-- Kitchen: start preparing and mark ready.
-- Viewer: read-only.
+- Owner, manager and waiter: legal progress and cancellation. There is no kitchen
+  or viewer role since 2026-11-10 (V-SRV-01).
 - Inactive, removed and unrelated staff: 404 for list and detail; no access.
 
 Missing authentication returns 401. Invalid filters/UUIDs return 422. A forbidden

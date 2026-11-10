@@ -10,7 +10,7 @@ import (
 
 // One query for the page, one batched query for its item snapshots, independent of page size.
 const operationalSelect = `SELECT o.id::text,o.order_number,o.channel,
- CASE WHEN t.identifier IS NOT NULL THEN 'Стол '||t.identifier WHEN o.channel='pickup' THEN 'Самовывоз' ELSE 'Онлайн' END,
+ CASE WHEN t.identifier IS NOT NULL THEN 'Стол '||t.identifier ELSE 'Онлайн' END,
  COALESCE(o.guest_name,''),o.total_minor,o.tip_minor,o.currency,o.status,COALESCE(o.notes,''),o.created_at,
  COALESCE(r.reservation_code,''),r.starts_at,COALESCE(r.guest_phone,''),COALESCE(r.guest_count,0),
  o.updated_at,o.placed_at,o.completed_at,COALESCE(o.venue_table_id::text,''),COALESCE(t.identifier,''),

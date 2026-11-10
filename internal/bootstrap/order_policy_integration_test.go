@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -37,11 +36,17 @@ func TestOrderPolicyIntegration(t *testing.T) {
 	var venue string
 	must(db.QueryRow(ctx, `INSERT INTO venues(owner_user_id,slug,name,address_line1,city,country_code,timezone,currency,status) VALUES($1,'policy','Policy','Main','Bratislava','SK','Europe/Bratislava','EUR','active') RETURNING id::text`, owner).Scan(&venue))
 	actors := map[string]string{"owner": owner, "outsider": user("outsider")}
-	for _, role := range []string{"manager", "waiter", "kitchen", "viewer"} {
+	for _, role := range []string{"manager", "waiter"} {
 		id := user(role)
 		actors[role] = id
 		_, err := db.Exec(ctx, `INSERT INTO venue_staff(venue_id,user_id,invited_email,role,status,invited_by_user_id) VALUES($1,$2,$3,$4,'active',$5)`, venue, id, role+"@policy.test", role, owner)
 		must(err)
+	}
+	// The kitchen and viewer roles no longer exist (V-SRV-01).
+	for _, role := range []string{"kitchen", "viewer"} {
+		if _, err := db.Exec(ctx, `INSERT INTO venue_staff(venue_id,invited_email,role,status,invited_by_user_id) VALUES($1,$2,$3,'invited',$4)`, venue, role+"-removed@policy.test", role, owner); err == nil {
+			t.Fatalf("%s role still accepted", role)
+		}
 	}
 	workplaces := venues.NewPostgresRepository(db)
 	for role, actor := range actors {
@@ -74,34 +79,20 @@ func TestOrderPolicyIntegration(t *testing.T) {
 	if _, err := svc.List(ctx, actors["outsider"], venue); !errors.Is(err, appfault.ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err := svc.UpdateStatus(ctx, actors["viewer"], venue, id, "accepted", "new"); !errors.Is(err, appfault.ErrForbidden) {
+	if _, err := svc.UpdateStatus(ctx, owner, venue, id, "served", "new"); !errors.Is(err, appfault.ErrConflict) {
 		t.Fatal(err)
 	}
-	if _, err := svc.UpdateStatus(ctx, owner, venue, id, "ready", "new"); !errors.Is(err, appfault.ErrConflict) {
-		t.Fatal(err)
+	if _, err := svc.UpdateStatus(ctx, owner, venue, id, "accepted", "new"); !errors.Is(err, appfault.ErrInvalidInput) {
+		t.Fatal("removed accepted status still settable", err)
 	}
-	_, err = svc.UpdateStatus(ctx, actors["waiter"], venue, id, "accepted", "new")
-	must(err)
-	if _, err := svc.UpdateStatus(ctx, actors["waiter"], venue, id, "preparing", "accepted"); !errors.Is(err, appfault.ErrForbidden) {
-		t.Fatal(err)
-	}
-	_, err = svc.UpdateStatus(ctx, actors["kitchen"], venue, id, "preparing", "accepted")
+	_, err = svc.UpdateStatus(ctx, actors["waiter"], venue, id, "preparing", "new")
 	must(err)
 	var conflict *ordering.StatusConflict
 	_, err = svc.UpdateStatus(ctx, owner, venue, id, "cancelled", "new", ordering.StatusChange{Reason: "guest_request"})
 	if !errors.As(err, &conflict) || conflict.CurrentStatus != "preparing" {
 		t.Fatal(err)
 	}
-	orders, err := svc.List(ctx, actors["kitchen"], venue)
-	must(err)
-	raw, err := json.Marshal(orders)
-	must(err)
-	for _, s := range []string{"PRIVATE", "total_minor", "unit_price_minor", "guest_phone", "currency"} {
-		if strings.Contains(string(raw), s) {
-			t.Fatalf("kitchen leak %s", raw)
-		}
-	}
-	for _, step := range []struct{ role, from, to string }{{"kitchen", "preparing", "ready"}, {"waiter", "ready", "served"}, {"manager", "served", "completed"}} {
+	for _, step := range []struct{ role, from, to string }{{"waiter", "preparing", "served"}, {"manager", "served", "completed"}} {
 		_, err = svc.UpdateStatus(ctx, actors[step.role], venue, id, step.to, step.from)
 		must(err)
 		var billStatus string
@@ -109,7 +100,7 @@ func TestOrderPolicyIntegration(t *testing.T) {
 		var closed *time.Time
 		must(db.QueryRow(ctx, `SELECT status,subtotal_minor,total_minor,closed_at,(SELECT count(*) FROM payments WHERE bill_id=$1) FROM bills WHERE id=$1`, bill).Scan(&billStatus, &subtotal, &total, &closed, &payments))
 		if billStatus != "open" || subtotal != 1200 || total != 1200 || closed != nil || payments != 0 {
-			t.Fatalf("cooking action changed bill: %s %d %d %v %d", billStatus, subtotal, total, closed, payments)
+			t.Fatalf("service action changed bill: %s %d %d %v %d", billStatus, subtotal, total, closed, payments)
 		}
 	}
 	var before, after time.Time
@@ -142,10 +133,10 @@ func TestOrderPolicyIntegration(t *testing.T) {
 			role, body string
 			code       int
 		}{
-			{"owner", `{"status":"accepted"}`, 422},
-			{"viewer", `{"status":"accepted","expected_status":"new"}`, 403},
-			{"outsider", `{"status":"accepted","expected_status":"new"}`, 404},
-			{"owner", `{"status":"ready","expected_status":"new"}`, 409},
+			{"owner", `{"status":"preparing"}`, 422},
+			{"owner", `{"status":"ready","expected_status":"new"}`, 422},
+			{"outsider", `{"status":"preparing","expected_status":"new"}`, 404},
+			{"owner", `{"status":"served","expected_status":"new"}`, 409},
 		} {
 			out := call(tc.role, "PATCH", tc.body)
 			if out.Code != tc.code {
@@ -155,8 +146,8 @@ func TestOrderPolicyIntegration(t *testing.T) {
 				t.Fatal(out.Body)
 			}
 		}
-		out := call("kitchen", "GET", "")
-		if out.Code != 200 || strings.Contains(out.Body.String(), "total_minor") || strings.Contains(out.Body.String(), "PRIVATE") {
+		out := call("waiter", "GET", "")
+		if out.Code != 200 || !strings.Contains(out.Body.String(), "total_minor") {
 			t.Fatal(out.Code, out.Body)
 		}
 	})
@@ -169,8 +160,12 @@ func TestOrderPolicyIntegration(t *testing.T) {
 			}
 		}
 		change := ordering.StatusChange{Reason: "guest_request", Comment: "Гость передумал"}
-		if _, err := svc.UpdateStatus(ctx, actors["kitchen"], venue, oid, "cancelled", "new", change); !errors.Is(err, appfault.ErrForbidden) {
+		if _, err := svc.UpdateStatus(ctx, actors["outsider"], venue, oid, "cancelled", "new", change); !errors.Is(err, appfault.ErrNotFound) {
 			t.Fatal(err)
+		}
+		// Waiters cancel orders themselves (V-SRV-01).
+		if _, err := svc.UpdateStatus(ctx, actors["waiter"], venue, create(), "cancelled", "new", change); err != nil {
+			t.Fatalf("waiter cancellation: %v", err)
 		}
 		var bid string
 		must(db.QueryRow(ctx, `INSERT INTO bills(venue_id,subtotal_minor,tip_minor,total_minor) VALUES($1,1200,100,1300) RETURNING id::text`, venue).Scan(&bid))
@@ -219,7 +214,7 @@ func TestOrderPolicyIntegration(t *testing.T) {
 		id = create()
 		start := make(chan struct{})
 		results := make(chan error, 2)
-		for _, status := range []string{"accepted", "cancelled"} {
+		for _, status := range []string{"preparing", "cancelled"} {
 			go func(status string) {
 				<-start
 				_, err := svc.UpdateStatus(ctx, owner, venue, id, status, "new", ordering.StatusChange{Reason: map[string]string{"cancelled": "guest_request"}[status]})
@@ -235,28 +230,28 @@ func TestOrderPolicyIntegration(t *testing.T) {
 			t.Fatal(fmt.Sprint(a, b))
 		}
 	}
-	_, err = db.Exec(ctx, `UPDATE venue_staff SET status='inactive' WHERE user_id=$1`, actors["kitchen"])
+	_, err = db.Exec(ctx, `UPDATE venue_staff SET status='inactive' WHERE user_id=$1`, actors["waiter"])
 	must(err)
-	listed, err := workplaces.ListWorkplaces(ctx, actors["kitchen"])
+	listed, err := workplaces.ListWorkplaces(ctx, actors["waiter"])
 	must(err)
 	if len(listed) != 0 {
 		t.Fatal("inactive membership visible")
 	}
-	_, err = db.Exec(ctx, `UPDATE venue_staff SET status='active',removed_at=now() WHERE user_id=$1`, actors["kitchen"])
+	_, err = db.Exec(ctx, `UPDATE venue_staff SET status='active',removed_at=now() WHERE user_id=$1`, actors["waiter"])
 	must(err)
-	listed, err = workplaces.ListWorkplaces(ctx, actors["kitchen"])
+	listed, err = workplaces.ListWorkplaces(ctx, actors["waiter"])
 	must(err)
 	if len(listed) != 0 {
 		t.Fatal("removed membership visible")
 	}
-	caps, err := access.NewCapabilityReader(db).ListCapabilities(ctx, actors["kitchen"])
+	caps, err := access.NewCapabilityReader(db).ListCapabilities(ctx, actors["waiter"])
 	must(err)
 	for _, capability := range caps {
 		if capability == "staff" {
 			t.Fatal("removed membership has staff capability")
 		}
 	}
-	if _, err = svc.List(ctx, actors["kitchen"], venue); !errors.Is(err, appfault.ErrNotFound) {
+	if _, err = svc.List(ctx, actors["waiter"], venue); !errors.Is(err, appfault.ErrNotFound) {
 		t.Fatal("inactive staff allowed", err)
 	}
 }

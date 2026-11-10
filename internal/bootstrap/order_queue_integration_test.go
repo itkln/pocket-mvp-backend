@@ -46,7 +46,7 @@ func TestOrderQueueIntegration(t *testing.T) {
 	// More than the previous 200-record cap, including identical timestamps for UUID tie-breaking.
 	_, err := db.Exec(ctx, `INSERT INTO orders(venue_id,venue_table_id,channel,status,created_at,guest_name,notes,total_minor)
  SELECT $1,$2,CASE WHEN n%2=0 THEN 'preorder' ELSE 'dine_in' END,
- CASE WHEN n%3=0 THEN 'accepted' WHEN n%3=1 THEN 'new' ELSE 'ready' END,
+ CASE WHEN n%3=0 THEN 'preparing' WHEN n%3=1 THEN 'new' ELSE 'served' END,
  '2026-01-01T12:00:00Z','PRIVATE GUEST','No salt',1200 FROM generate_series(1,231) n`, venue, table)
 	must(err)
 	_, err = db.Exec(ctx, `INSERT INTO orders(venue_id,channel,status,created_at)
@@ -141,10 +141,10 @@ func TestOrderQueueIntegration(t *testing.T) {
 			}
 		}
 	})
-	page, err := svc.ListPage(ctx, owner, venue, ordering.Query{Statuses: []string{"accepted", "new"}, Channel: "dine_in", TableID: table, Limit: 100})
+	page, err := svc.ListPage(ctx, owner, venue, ordering.Query{Statuses: []string{"preparing", "new"}, Channel: "dine_in", TableID: table, Limit: 100})
 	must(err)
 	var expected int
-	must(db.QueryRow(ctx, `SELECT count(*) FROM orders WHERE venue_id=$1 AND venue_table_id=$2 AND channel='dine_in' AND status IN ('accepted','new')`, venue, table).Scan(&expected))
+	must(db.QueryRow(ctx, `SELECT count(*) FROM orders WHERE venue_id=$1 AND venue_table_id=$2 AND channel='dine_in' AND status IN ('preparing','new')`, venue, table).Scan(&expected))
 	if len(page.Orders) != expected || page.HasMore {
 		t.Fatal("combined filters", len(page.Orders), expected)
 	}
@@ -183,10 +183,10 @@ func TestOrderQueueIntegration(t *testing.T) {
 	if _, err := svc.Get(ctx, owner, venue, draft); !errors.Is(err, appfault.ErrNotFound) {
 		t.Fatal("draft exposed", err)
 	}
-	_, err = db.Exec(ctx, `UPDATE orders SET status='accepted' WHERE id=$1`, activeID)
+	_, err = db.Exec(ctx, `UPDATE orders SET status='new' WHERE id=$1`, activeID)
 	must(err)
 	actors := map[string]string{"owner": owner}
-	for _, role := range []string{"manager", "waiter", "kitchen", "viewer", "outsider"} {
+	for _, role := range []string{"manager", "waiter", "outsider"} {
 		var id string
 		must(db.QueryRow(ctx, `INSERT INTO users(email,password_hash,first_name,last_name) VALUES($1,'x','Staff','Test') RETURNING id::text`, role+"@queue.test").Scan(&id))
 		actors[role] = id
@@ -216,13 +216,6 @@ func TestOrderQueueIntegration(t *testing.T) {
 				if out.Code != 200 {
 					t.Fatal(role, out.Code, out.Body)
 				}
-				if role == "kitchen" {
-					for _, private := range []string{"PRIVATE GUEST", "total_minor", "unit_price_minor", "tip_minor", "guest_phone", "currency", "bill_id"} {
-						if strings.Contains(out.Body.String(), private) {
-							t.Fatal("kitchen leak", out.Body)
-						}
-					}
-				}
 			}
 		}
 	}
@@ -231,7 +224,7 @@ func TestOrderQueueIntegration(t *testing.T) {
 			t.Fatal(suffix, out.Code, out.Body)
 		}
 	}
-	for role, want := range map[string][]string{"owner": {"preparing", "cancelled"}, "manager": {"preparing", "cancelled"}, "kitchen": {"preparing"}, "waiter": {}, "viewer": {}} {
+	for role, want := range map[string][]string{"owner": {"preparing", "cancelled"}, "manager": {"preparing", "cancelled"}, "waiter": {"preparing", "cancelled"}} {
 		order, err := svc.Get(ctx, actors[role], venue, activeID)
 		must(err)
 		if !slices.Equal(order.AllowedActions, want) || order.UpdatedAt.IsZero() {
@@ -259,7 +252,7 @@ func TestOrderQueueIntegration(t *testing.T) {
 		input := ordering.AlertSettings{WarningMinutes: 5, CriticalMinutes: 15, WarningColor: "#ffaa00", CriticalColor: "#ff0000", PreorderLeadMinutes: 45}
 		_, err = svc.SaveAlertSettings(ctx, owner, venue, input)
 		must(err)
-		for _, role := range []string{"manager", "kitchen", "waiter", "viewer"} {
+		for _, role := range []string{"manager", "waiter"} {
 			got, err := svc.GetAlertSettings(ctx, actors[role], venue)
 			must(err)
 			if got.WarningMinutes != 5 || got.PreorderLeadMinutes != 45 || got.CanEdit {
@@ -285,15 +278,15 @@ func TestOrderQueueIntegration(t *testing.T) {
 	})
 	for _, state := range []string{"inactive", "removed"} {
 		if state == "inactive" {
-			_, err = db.Exec(ctx, `UPDATE venue_staff SET status='inactive' WHERE user_id=$1`, actors["kitchen"])
+			_, err = db.Exec(ctx, `UPDATE venue_staff SET status='inactive' WHERE user_id=$1`, actors["waiter"])
 		} else {
-			_, err = db.Exec(ctx, `UPDATE venue_staff SET status='active',removed_at=now() WHERE user_id=$1`, actors["kitchen"])
+			_, err = db.Exec(ctx, `UPDATE venue_staff SET status='active',removed_at=now() WHERE user_id=$1`, actors["waiter"])
 		}
 		must(err)
-		if out := call("kitchen", "staff", "/"+activeID); out.Code != 404 {
+		if out := call("waiter", "staff", "/"+activeID); out.Code != 404 {
 			t.Fatal("inactive/removed staff detail", out.Code)
 		}
-		if out := call("kitchen", "staff", ""); out.Code != 404 {
+		if out := call("waiter", "staff", ""); out.Code != 404 {
 			t.Fatal("inactive/removed staff list", out.Code)
 		}
 	}

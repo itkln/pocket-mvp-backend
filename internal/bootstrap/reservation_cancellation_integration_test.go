@@ -112,8 +112,6 @@ func TestReservationCancellationIntegration(t *testing.T) {
 	t.Run("atomic preorder cancellation, concurrent retries, history and slot release", func(t *testing.T) {
 		created, input, orderID := book(t, true)
 		originalKey := input.IdempotencyKey
-		_, err := vendor.UpdateStatus(ctx, venueID, orderID, "accepted")
-		must(t, err)
 		input.IdempotencyKey += "-replacement"
 		if _, err := service.Create(ctx, venueID, input); !errors.Is(err, appfault.ErrConflict) {
 			t.Fatalf("occupied slot accepted: %v", err)
@@ -185,8 +183,6 @@ func TestReservationCancellationIntegration(t *testing.T) {
 	t.Run("preparation and cancellation cannot both succeed", func(t *testing.T) {
 		for i := 0; i < 4; i++ {
 			created, _, orderID := book(t, true)
-			_, err := vendor.UpdateStatus(ctx, venueID, orderID, "accepted")
-			must(t, err)
 			start := make(chan struct{})
 			cancelResult, prepareResult := make(chan error, 1), make(chan error, 1)
 			go func() { <-start; _, err := service.CancelCustomer(ctx, customerID, created.ID); cancelResult <- err }()
@@ -212,9 +208,9 @@ func TestReservationCancellationIntegration(t *testing.T) {
 		}
 	})
 	t.Run("blocked preorder and paid preorder leave all data intact", func(t *testing.T) {
-		for _, status := range []string{"preparing", "ready", "served", "completed"} {
+		for _, status := range []string{"preparing", "served", "completed"} {
 			created, _, orderID := book(t, true)
-			for _, next := range []string{"accepted", "preparing", "ready", "served", "completed"} {
+			for _, next := range []string{"preparing", "served", "completed"} {
 				_, err := vendor.UpdateStatus(ctx, venueID, orderID, next)
 				must(t, err)
 				if next == status {

@@ -119,8 +119,8 @@ func TestReservationPreorderIntegration(t *testing.T) {
 	if err != nil || detail.ReservationID != created.ID || detail.ReservationCode != created.Code || detail.ReservationStartsAt == nil || !detail.ReservationStartsAt.Equal(input.StartsAt) || detail.Currency != "EUR" || len(detail.Items) != 1 || detail.Items[0].Quantity != 2 || detail.Items[0].TotalMinor != 2400 {
 		t.Fatalf("queue preorder details: %+v, %v", detail, err)
 	}
-	updatedOrder, err := ordering.NewPostgresRepository(db).UpdateStatus(ctx, venueID, ownerOrders[0].ID, "accepted")
-	if err != nil || updatedOrder.Status != "accepted" || updatedOrder.ReservationCode != created.Code ||
+	updatedOrder, err := ordering.NewPostgresRepository(db).UpdateStatus(ctx, venueID, ownerOrders[0].ID, "preparing")
+	if err != nil || updatedOrder.Status != "preparing" || updatedOrder.ReservationCode != created.Code ||
 		updatedOrder.ReservationStartsAt == nil || !updatedOrder.ReservationStartsAt.Equal(input.StartsAt) ||
 		updatedOrder.GuestPhone != input.GuestPhone || updatedOrder.GuestCount != input.Guests ||
 		len(updatedOrder.Items) != 1 || updatedOrder.Items[0].Name != "Pasta" || updatedOrder.Items[0].UnitPriceMinor != 1200 {
@@ -255,11 +255,8 @@ func TestReservationPreorderIntegration(t *testing.T) {
 		prepared.ReservationStatus != "confirmed" || prepared.ReservationStartsAt == nil || !prepared.ReservationStartsAt.Equal(input.StartsAt) {
 		t.Fatalf("manual preparation changed the visit: %+v, %v", prepared, err)
 	}
-	// A stale client cannot advance an accepted order after its booking was cancelled.
+	// A stale client cannot start preparing an order after its booking was cancelled.
 	staleOrderID := preorderID
-	if _, err := orders.UpdateStatus(ctx, venueID, staleOrderID, "accepted"); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := db.Exec(ctx, `UPDATE reservations SET status='cancelled' WHERE id=$1`, accountResult.ID); err != nil {
 		t.Fatal(err)
 	}

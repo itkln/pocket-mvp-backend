@@ -25,7 +25,6 @@ func (r *PostgresRepository) List(ctx context.Context, venueID string) ([]Order,
 		SELECT o.id::text, o.order_number, o.channel,
 		       CASE
 		         WHEN t.identifier IS NOT NULL THEN 'Стол ' || t.identifier
-		         WHEN o.channel = 'pickup' THEN 'Самовывоз'
 		         ELSE 'Онлайн'
 		       END,
 		       COALESCE(o.guest_name, ''), o.total_minor, o.tip_minor, o.currency, o.status,

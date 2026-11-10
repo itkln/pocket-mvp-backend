@@ -26,11 +26,10 @@ func (s *Service) List(ctx context.Context, ownerID, venueID string) ([]Order, e
 	if err != nil {
 		return nil, err
 	}
-	orders, err := s.repository.List(ctx, venueID)
-	for i := range orders {
-		orders[i].kitchenOnly = role == RoleKitchen
+	if !roleMaySet(role, "") {
+		return nil, appfault.ErrForbidden
 	}
-	return orders, err
+	return s.repository.List(ctx, venueID)
 }
 
 // Only dishes attached to confirmed reservations appear in a customer's preorder history.
@@ -57,7 +56,6 @@ func (s *Service) UpdateStatus(ctx context.Context, ownerID, venueID, orderID, s
 
 // AllowedActions is advisory; mutation authorization is repeated under transaction locks.
 func (o *Order) applyRole(role string) {
-	o.kitchenOnly = role == RoleKitchen
 	o.AllowedActions = []string{}
 	if roleMaySet(role, StatusCancelled) && !o.cancelAllowed && !isFinalStatus(o.Status) {
 		o.CancellationBlocked = "payment_or_closed_bill"

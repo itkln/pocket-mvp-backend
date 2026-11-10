@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	staffRolePattern   = regexp.MustCompile(`^(manager|waiter|kitchen|viewer)$`)
+	staffRolePattern   = regexp.MustCompile(`^(manager|waiter)$`)
 	staffStatusPattern = regexp.MustCompile(`^(invited|active|inactive)$`)
 )
 

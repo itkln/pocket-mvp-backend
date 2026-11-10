@@ -48,20 +48,20 @@ func demoOrders(venueID string) []orderSeed {
 	if venueID == secondaryVenueID {
 		return []orderSeed{
 			{ID: "70000000-0000-4000-8000-000000000101", TableID: "61000000-0000-4000-8000-000000000102", StaffID: "50000000-0000-4000-8000-000000000102", Channel: "dine_in", Status: "preparing", GuestName: "Мария", TotalMinor: 810, CreatedAt: now.Add(-12 * time.Minute)},
-			{ID: "70000000-0000-4000-8000-000000000102", Channel: "pickup", Status: "completed", GuestName: "Томаш", TotalMinor: 1210, CreatedAt: now.Add(-95 * time.Minute)},
+			{ID: "70000000-0000-4000-8000-000000000102", Channel: "online", Status: "completed", GuestName: "Томаш", TotalMinor: 1210, CreatedAt: now.Add(-95 * time.Minute)},
 			{ID: "70000000-0000-4000-8000-000000000103", Channel: "online", Status: "new", GuestName: "Елена", TotalMinor: 740, Notes: "Без сахара", CreatedAt: now.Add(-4 * time.Minute)},
 		}
 	}
 	return []orderSeed{
 		{ID: "70000000-0000-4000-8000-000000000001", TableID: "61000000-0000-4000-8000-000000000002", StaffID: "50000000-0000-4000-8000-000000000001", Channel: "dine_in", Status: "new", GuestName: "Анна К.", TotalMinor: 4250, Notes: "Аллергия на орехи", CreatedAt: now.Add(-3 * time.Minute)},
 		{ID: "70000000-0000-4000-8000-000000000002", Channel: "online", Status: "preparing", GuestName: "Марк С.", TotalMinor: 6890, CreatedAt: now.Add(-11 * time.Minute)},
-		{ID: "70000000-0000-4000-8000-000000000003", TableID: "61000000-0000-4000-8000-000000000003", StaffID: "50000000-0000-4000-8000-000000000001", Channel: "dine_in", Status: "ready", GuestName: "Олег", TotalMinor: 3240, CreatedAt: now.Add(-18 * time.Minute)},
+		{ID: "70000000-0000-4000-8000-000000000003", TableID: "61000000-0000-4000-8000-000000000003", StaffID: "50000000-0000-4000-8000-000000000001", Channel: "dine_in", Status: "preparing", GuestName: "Олег", TotalMinor: 3240, CreatedAt: now.Add(-18 * time.Minute)},
 		{ID: "70000000-0000-4000-8000-000000000004", TableID: "61000000-0000-4000-8000-000000000004", StaffID: "50000000-0000-4000-8000-000000000001", Channel: "dine_in", Status: "served", GuestName: "Наталья", TotalMinor: 7820, CreatedAt: now.Add(-42 * time.Minute)},
-		{ID: "70000000-0000-4000-8000-000000000005", Channel: "pickup", Status: "completed", GuestName: "Виктор", TotalMinor: 5370, CreatedAt: now.Add(-75 * time.Minute)},
+		{ID: "70000000-0000-4000-8000-000000000005", Channel: "online", Status: "completed", GuestName: "Виктор", TotalMinor: 5370, CreatedAt: now.Add(-75 * time.Minute)},
 		{ID: "70000000-0000-4000-8000-000000000006", TableID: "61000000-0000-4000-8000-000000000012", StaffID: "50000000-0000-4000-8000-000000000004", Channel: "preorder", Status: "completed", GuestName: "Ева", TotalMinor: 9550, Notes: "День рождения", CreatedAt: now.Add(-130 * time.Minute)},
-		{ID: "70000000-0000-4000-8000-000000000007", Channel: "online", Status: "accepted", GuestName: "Даниэль", TotalMinor: 2860, CreatedAt: now.Add(-7 * time.Minute)},
+		{ID: "70000000-0000-4000-8000-000000000007", Channel: "online", Status: "new", GuestName: "Даниэль", TotalMinor: 2860, CreatedAt: now.Add(-7 * time.Minute)},
 		{ID: "70000000-0000-4000-8000-000000000008", TableID: "61000000-0000-4000-8000-000000000023", StaffID: "50000000-0000-4000-8000-000000000001", Channel: "dine_in", Status: "completed", GuestName: "Сара", TotalMinor: 12140, CreatedAt: now.Add(-190 * time.Minute)},
-		{ID: "70000000-0000-4000-8000-000000000009", Channel: "pickup", Status: "cancelled", GuestName: "Иван", TotalMinor: 1790, Notes: "Отменено гостем", CreatedAt: now.Add(-24 * time.Hour)},
+		{ID: "70000000-0000-4000-8000-000000000009", Channel: "online", Status: "cancelled", GuestName: "Иван", TotalMinor: 1790, Notes: "Отменено гостем", CreatedAt: now.Add(-24 * time.Hour)},
 	}
 }
 
@@ -86,7 +86,7 @@ func orderMenuItem(venueID string, index int) (string, string) {
 
 func orderItemStatus(orderStatus string) string {
 	switch orderStatus {
-	case "new", "preparing", "ready":
+	case "new", "preparing":
 		return orderStatus
 	case "cancelled":
 		return "cancelled"

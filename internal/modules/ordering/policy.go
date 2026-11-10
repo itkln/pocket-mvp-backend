@@ -28,7 +28,7 @@ func validateTransition(role, channel, current, target, expected string) error {
 	if expected != "" && current != expected {
 		return &StatusConflict{current}
 	}
-	if isFinalStatus(current) || (target != StatusCancelled && next(channel, current) != target) {
+	if isFinalStatus(current) || (target != StatusCancelled && next(current) != target) {
 		return &StatusConflict{current}
 	}
 	return nil

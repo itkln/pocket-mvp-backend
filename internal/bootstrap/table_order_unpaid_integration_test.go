@@ -66,7 +66,7 @@ func TestTableOrderWithoutPrepaymentIntegration(t *testing.T) {
 		detail, err := queue.Get(ctx, ownerID, venueID, order.ID)
 		must(err)
 		if detail.BillID != visit || detail.TableID != qr.ID || detail.TableLabel != "07" || detail.Status != "new" || detail.Notes != input.Notes {
-			t.Fatalf("wrong kitchen order: %+v", detail)
+			t.Fatalf("wrong service order: %+v", detail)
 		}
 		retry, err := service.Create(ctx, input)
 		must(err)
@@ -77,20 +77,20 @@ func TestTableOrderWithoutPrepaymentIntegration(t *testing.T) {
 	active, err := queue.ListPage(ctx, ownerID, venueID, ordering.Query{Channel: "dine_in", TableID: qr.ID})
 	must(err)
 	if len(active.Orders) != 2 {
-		t.Fatalf("kitchen queue has %d orders", len(active.Orders))
+		t.Fatalf("service queue has %d orders", len(active.Orders))
 	}
 	previous := "new"
-	for _, status := range []string{"accepted", "preparing", "ready", "served", "completed"} {
+	for _, status := range []string{"preparing", "served", "completed"} {
 		_, err := queue.UpdateStatus(ctx, ownerID, venueID, first.ID, status, previous)
 		must(err)
 		bill, err := service.CurrentBill(ctx, token)
 		must(err)
 		if bill.ID != visit || bill.Status != "open" || bill.TotalMinor != 2400 {
-			t.Fatalf("kitchen status %s changed bill: %+v", status, bill)
+			t.Fatalf("service status %s changed bill: %+v", status, bill)
 		}
 		previous = status
 	}
-	// A retry even after kitchen completion must return the same order and total.
+	// A retry even after service completion must return the same order and total.
 	input.IdempotencyKey = "unpaid-order-first-key"
 	replay, err := service.Create(ctx, input)
 	must(err)
@@ -108,6 +108,6 @@ func TestTableOrderWithoutPrepaymentIntegration(t *testing.T) {
 	var closed bool
 	must(db.QueryRow(ctx, `SELECT closed_at IS NOT NULL FROM bills WHERE id=$1`, visit).Scan(&closed))
 	if closed {
-		t.Fatal("kitchen completion closed visit")
+		t.Fatal("order completion closed visit")
 	}
 }

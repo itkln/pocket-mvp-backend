@@ -68,7 +68,11 @@ func TestStaffInvitationIntegration(t *testing.T) {
 	}
 	base := "/owner/venues/" + venue + "/staff"
 	create := func() *httptest.ResponseRecorder {
-		return call("POST", base, `{"display_name":"Kitchen","email":"invite-kitchen@example.com","role":"kitchen"}`, owner)
+		return call("POST", base, `{"display_name":"Waiter","email":"invite-kitchen@example.com","role":"waiter"}`, owner)
+	}
+	// The kitchen and viewer roles no longer exist (V-SRV-01).
+	for _, removed := range []string{"kitchen", "viewer"} {
+		want(call("POST", base, `{"display_name":"Removed","email":"invite-removed@example.com","role":"`+removed+`"}`, owner), 422)
 	}
 	w := create()
 	want(w, 201)
@@ -113,7 +117,7 @@ func TestStaffInvitationIntegration(t *testing.T) {
 	want(call("POST", accept, payload(token), other), 403)
 	want(call("POST", base+"/"+member+"/invite", "", other), 404)
 	want(call("POST", base+"/"+member+"/invite", "", owner), 409)
-	want(call("PATCH", base+"/"+member, `{"role":"kitchen","status":"active"}`, owner), 404)
+	want(call("PATCH", base+"/"+member, `{"role":"manager","status":"active"}`, owner), 404)
 	w = call("GET", "/staff/venues", "", staff)
 	want(w, 200)
 	if strings.Contains(w.Body.String(), venue) {
@@ -142,7 +146,7 @@ func TestStaffInvitationIntegration(t *testing.T) {
 	}
 	var linked, role, status string
 	err = db.QueryRow(ctx, `SELECT user_id::text,role,status FROM venue_staff WHERE id=$1`, member).Scan(&linked, &role, &status)
-	if err != nil || linked != staffID || role != "kitchen" || status != "active" {
+	if err != nil || linked != staffID || role != "waiter" || status != "active" {
 		t.Fatal("membership was not activated correctly", err)
 	}
 	w = call("GET", "/auth/me", "", staff)

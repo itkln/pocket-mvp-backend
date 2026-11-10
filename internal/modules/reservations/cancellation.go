@@ -58,9 +58,10 @@ func cancellationEligibility(status string, startsAt, now time.Time, rawPolicy j
 		result.Reason = "cancellation_payment_started"
 		return result
 	}
+	// There is no accepted step any more: "accepted" and "preparing" both allow cancelling
+	// until the waiter starts preparing the preorder. Both values stay valid for stored policies.
 	for _, state := range preorderStatuses {
-		allowed := state == "draft" || state == "new" || state == "cancelled" ||
-			(policy.PreorderUntil == "preparing" && state == "accepted") || policy.PreorderUntil == "visit"
+		allowed := state == "draft" || state == "new" || state == "cancelled" || policy.PreorderUntil == "visit"
 		if !allowed {
 			result.Reason = "cancellation_preorder_locked"
 			return result

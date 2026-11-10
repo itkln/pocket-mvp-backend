@@ -121,8 +121,6 @@ func TestTableQRIntegration(t *testing.T) {
 	if len(orders) != 2 || orders[0].ID != created.ID || orders[0].Source != "Стол 07" || len(orders[0].Items) != 1 {
 		t.Fatalf("vendor order: %+v", orders)
 	}
-	_, err = vendor.UpdateStatus(ctx, venueID, created.ID, "accepted")
-	must(t, err)
 	_, err = vendor.UpdateStatus(ctx, venueID, created.ID, "preparing")
 	must(t, err)
 	saved, err := service.Lookup(ctx, token, input.IdempotencyKey)

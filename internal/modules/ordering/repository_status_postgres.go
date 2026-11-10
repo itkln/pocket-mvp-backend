@@ -127,8 +127,7 @@ func updateOrderStatus(ctx context.Context, tx pgx.Tx, venueID, orderID, status 
 			RETURNING *
 		)
 		SELECT o.id::text, o.order_number, o.channel,
-			CASE WHEN t.identifier IS NOT NULL THEN 'Стол ' || t.identifier
-				WHEN o.channel = 'pickup' THEN 'Самовывоз' ELSE 'Онлайн' END,
+			CASE WHEN t.identifier IS NOT NULL THEN 'Стол ' || t.identifier ELSE 'Онлайн' END,
 			COALESCE(o.guest_name, ''), o.total_minor, o.tip_minor, o.currency, o.status,
 			COALESCE(o.notes, ''), o.created_at,
 			COALESCE(r.reservation_code, ''), r.starts_at, COALESCE(r.guest_phone, ''), COALESCE(r.guest_count, 0)
@@ -180,7 +179,7 @@ func (r *PostgresRepository) orderResponse(ctx context.Context, venueID, orderID
 
 func readCurrentOrder(ctx context.Context, tx pgx.Tx, venueID, orderID string) (Order, error) {
 	return scanOrder(tx.QueryRow(ctx, `SELECT o.id::text,o.order_number,o.channel,
- CASE WHEN t.identifier IS NOT NULL THEN 'Стол '||t.identifier WHEN o.channel='pickup' THEN 'Самовывоз' ELSE 'Онлайн' END,
+ CASE WHEN t.identifier IS NOT NULL THEN 'Стол '||t.identifier ELSE 'Онлайн' END,
  COALESCE(o.guest_name,''),o.total_minor,o.tip_minor,o.currency,o.status,COALESCE(o.notes,''),o.created_at,
  COALESCE(r.reservation_code,''),r.starts_at,COALESCE(r.guest_phone,''),COALESCE(r.guest_count,0)
  FROM orders o LEFT JOIN venue_tables t ON t.id=o.venue_table_id LEFT JOIN reservations r ON r.id=o.reservation_id
