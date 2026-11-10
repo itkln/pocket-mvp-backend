@@ -2,14 +2,11 @@ package ordering
 
 import (
 	"context"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
 	"pocket-mvp-backend/internal/appfault"
 )
-
-var orderStatusPattern = regexp.MustCompile(`^(new|accepted|preparing|ready|served|completed|cancelled)$`)
 
 type VenueAuthorizer interface {
 	OrderRole(context.Context, string, string) (string, error)
@@ -31,7 +28,7 @@ func (s *Service) List(ctx context.Context, ownerID, venueID string) ([]Order, e
 	}
 	orders, err := s.repository.List(ctx, venueID)
 	for i := range orders {
-		orders[i].kitchenOnly = role == "kitchen"
+		orders[i].kitchenOnly = role == RoleKitchen
 	}
 	return orders, err
 }
@@ -43,7 +40,7 @@ func (s *Service) UpdateStatus(ctx context.Context, ownerID, venueID, orderID, s
 	if err != nil {
 		return Order{}, err
 	}
-	if !orderStatusPattern.MatchString(status) || !orderStatusPattern.MatchString(expected) {
+	if !isSettableStatus(status) || !isSettableStatus(expected) {
 		return Order{}, appfault.ErrInvalidInput
 	}
 	change := StatusChange{ExpectedStatus: expected, ActorID: ownerID}
@@ -60,16 +57,16 @@ func (s *Service) UpdateStatus(ctx context.Context, ownerID, venueID, orderID, s
 
 // AllowedActions is advisory; mutation authorization is repeated under transaction locks.
 func (o *Order) applyRole(role string) {
-	o.kitchenOnly = role == "kitchen"
+	o.kitchenOnly = role == RoleKitchen
 	o.AllowedActions = []string{}
-	if (role == "owner" || role == "manager") && !o.cancelAllowed && o.Status != "cancelled" && o.Status != "completed" {
+	if roleMaySet(role, StatusCancelled) && !o.cancelAllowed && !isFinalStatus(o.Status) {
 		o.CancellationBlocked = "payment_or_closed_bill"
 	}
-	if o.Status == "draft" || o.Status == "completed" || o.Status == "cancelled" {
+	if o.Status == StatusDraft || isFinalStatus(o.Status) {
 		return
 	}
-	for _, target := range []string{"accepted", "preparing", "ready", "served", "completed", "cancelled"} {
-		if target == o.Status || (target == "cancelled" && !o.cancelAllowed) || (target != "cancelled" && o.ReservationStatus == "cancelled") {
+	for _, target := range settableStatuses[1:] {
+		if target == o.Status || (target == StatusCancelled && !o.cancelAllowed) || (target != StatusCancelled && o.ReservationStatus == "cancelled") {
 			continue
 		}
 		if validateTransition(role, o.Channel, o.Status, target, o.Status) == nil {
@@ -114,7 +111,7 @@ func validateCancellation(status string, c StatusChange) error {
 	if utf8.RuneCountInString(c.Comment) > 500 {
 		return appfault.ErrInvalidInput
 	}
-	if status != "cancelled" {
+	if status != StatusCancelled {
 		if c.Reason != "" || c.Comment != "" {
 			return appfault.ErrInvalidInput
 		}

@@ -55,7 +55,7 @@ func (q *Query) normalize(venueID string) error {
 	if q.Limit < 1 || q.Limit > 100 {
 		return appfault.ErrInvalidInput
 	}
-	if q.Channel != "" && q.Channel != "dine_in" && q.Channel != "preorder" && q.Channel != "online" && q.Channel != "pickup" {
+	if q.Channel != "" && !isChannel(q.Channel) {
 		return appfault.ErrInvalidInput
 	}
 	if q.TableID != "" && !uuidPattern.MatchString(q.TableID) {
@@ -79,7 +79,7 @@ func (q *Query) normalize(venueID string) error {
 	q.TableID = strings.ToLower(q.TableID)
 	unique := map[string]bool{}
 	for _, status := range q.Statuses {
-		if !orderStatusPattern.MatchString(status) || ((status == "completed" || status == "cancelled") != (q.Scope == "history")) {
+		if !isSettableStatus(status) || isFinalStatus(status) != (q.Scope == "history") {
 			return appfault.ErrInvalidInput
 		}
 		unique[status] = true

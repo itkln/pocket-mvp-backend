@@ -33,10 +33,10 @@ func (r *PostgresRepository) ListPage(ctx context.Context, venueID string, query
 	if err := query.normalize(venueID); err != nil {
 		return Page{}, err
 	}
-	predicate := `o.status IN ('new','accepted','preparing','ready','served')`
+	predicate := `o.status IN (` + sqlStatuses(activeStatuses) + `)`
 	direction, comparison := "ASC", ">"
 	if query.Scope == "history" {
-		predicate = `o.status IN ('completed','cancelled')`
+		predicate = `o.status IN (` + sqlStatuses(finalStatuses) + `)`
 		direction, comparison = "DESC", "<"
 	}
 	args := []any{venueID, query.Statuses, query.Channel, query.TableID, query.Limit + 1, query.Search, query.Table, query.DateFrom, query.DateTo}

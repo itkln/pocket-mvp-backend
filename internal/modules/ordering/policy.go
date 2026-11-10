@@ -15,13 +15,10 @@ func (e *StatusConflict) Unwrap() error { return appfault.ErrConflict }
 
 // Status is a monotonic concurrency token: final orders cannot be reopened.
 func validateTransition(role, channel, current, target, expected string) error {
-	allowed := role == "owner" || role == "manager" ||
-		(role == "waiter" && (target == "accepted" || target == "served")) ||
-		(role == "kitchen" && (target == "preparing" || target == "ready"))
-	if !allowed {
+	if !roleMaySet(role, target) {
 		return appfault.ErrForbidden
 	}
-	if !orderStatusPattern.MatchString(target) {
+	if !isSettableStatus(target) {
 		return appfault.ErrInvalidInput
 	}
 	// Replaying an already-applied action is a no-op, even with its old token.
@@ -31,12 +28,7 @@ func validateTransition(role, channel, current, target, expected string) error {
 	if expected != "" && current != expected {
 		return &StatusConflict{current}
 	}
-	next := map[string]string{"new": "accepted", "accepted": "preparing", "preparing": "ready", "ready": "served", "served": "completed"}
-	// Pickup is handed over at ready; it has no table service stage.
-	if channel == "pickup" {
-		next["ready"] = "completed"
-	}
-	if current == "completed" || current == "cancelled" || (target != "cancelled" && next[current] != target) {
+	if isFinalStatus(current) || (target != StatusCancelled && next(channel, current) != target) {
 		return &StatusConflict{current}
 	}
 	return nil
