@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"pocket-mvp-backend/internal/validate"
 	"strings"
 	"time"
 
@@ -37,7 +38,7 @@ type HistoryPage struct {
 }
 
 func (s *Service) History(ctx context.Context, input HistoryInput) (HistoryPage, error) {
-	if !uuidPattern.MatchString(input.VenueID) || len(input.LegacyKeys) > 100 || len(input.Cursor) > 512 {
+	if !validate.UUID(input.VenueID) || len(input.LegacyKeys) > 100 || len(input.Cursor) > 512 {
 		return HistoryPage{}, appfault.ErrInvalidInput
 	}
 	query := HistoryQuery{VenueID: input.VenueID, CustomerUserID: input.CustomerUserID}
@@ -56,7 +57,7 @@ func (s *Service) History(ctx context.Context, input HistoryInput) (HistoryPage,
 	if input.Cursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(input.Cursor)
 		var cursor historyCursor
-		if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.CreatedAt.IsZero() || !uuidPattern.MatchString(cursor.ID) {
+		if err != nil || json.Unmarshal(raw, &cursor) != nil || cursor.CreatedAt.IsZero() || !validate.UUID(cursor.ID) {
 			return HistoryPage{}, appfault.ErrInvalidInput
 		}
 		query.Before = &cursor

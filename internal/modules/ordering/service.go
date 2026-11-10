@@ -2,6 +2,8 @@ package ordering
 
 import (
 	"context"
+	"pocket-mvp-backend/internal/lifecycle"
+	"pocket-mvp-backend/internal/validate"
 	"strings"
 	"unicode/utf8"
 
@@ -57,14 +59,14 @@ func (s *Service) UpdateStatus(ctx context.Context, ownerID, venueID, orderID, s
 // AllowedActions is advisory; mutation authorization is repeated under transaction locks.
 func (o *Order) applyRole(role string) {
 	o.AllowedActions = []string{}
-	if roleMaySet(role, StatusCancelled) && !o.cancelAllowed && !isFinalStatus(o.Status) {
+	if roleMaySet(role, lifecycle.OrderCancelled) && !o.cancelAllowed && !isFinalStatus(o.Status) {
 		o.CancellationBlocked = "payment_or_closed_bill"
 	}
-	if o.Status == StatusDraft || isFinalStatus(o.Status) {
+	if o.Status == lifecycle.OrderDraft || isFinalStatus(o.Status) {
 		return
 	}
 	for _, target := range settableStatuses[1:] {
-		if target == o.Status || (target == StatusCancelled && !o.cancelAllowed) || (target != StatusCancelled && o.ReservationStatus == "cancelled") {
+		if target == o.Status || (target == lifecycle.OrderCancelled && !o.cancelAllowed) || (target != lifecycle.OrderCancelled && o.ReservationStatus == lifecycle.ReservationCancelled) {
 			continue
 		}
 		if validateTransition(role, o.Channel, o.Status, target, o.Status) == nil {
@@ -90,7 +92,7 @@ func (s *Service) ListPage(ctx context.Context, userID, venueID string, query Qu
 	return page, nil
 }
 func (s *Service) Get(ctx context.Context, userID, venueID, orderID string) (Order, error) {
-	if !uuidPattern.MatchString(venueID) || !uuidPattern.MatchString(orderID) {
+	if !validate.UUID(venueID) || !validate.UUID(orderID) {
 		return Order{}, appfault.ErrInvalidInput
 	}
 	role, err := s.authorizer.OrderRole(ctx, userID, venueID)
@@ -109,7 +111,7 @@ func validateCancellation(status string, c StatusChange) error {
 	if utf8.RuneCountInString(c.Comment) > 500 {
 		return appfault.ErrInvalidInput
 	}
-	if status != StatusCancelled {
+	if status != lifecycle.OrderCancelled {
 		if c.Reason != "" || c.Comment != "" {
 			return appfault.ErrInvalidInput
 		}

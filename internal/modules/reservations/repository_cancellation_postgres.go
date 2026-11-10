@@ -3,6 +3,7 @@ package reservations
 import (
 	"context"
 	"errors"
+	"pocket-mvp-backend/internal/lifecycle"
 
 	"github.com/jackc/pgx/v5"
 
@@ -25,7 +26,7 @@ func (r *PostgresRepository) CancelCustomer(ctx context.Context, customerID, res
 	if err != nil {
 		return CustomerReservation{}, err
 	}
-	if status != "cancelled" {
+	if status != lifecycle.ReservationCancelled {
 		// Lock orders before checking eligibility. Vendor status changes serialize on these rows.
 		// FOR UPDATE also prevents new payment/item foreign keys being attached during cancellation.
 		orders, err := tx.Query(ctx, `SELECT id FROM orders WHERE reservation_id = $1 AND channel = 'preorder' ORDER BY id FOR UPDATE`, reservationID)

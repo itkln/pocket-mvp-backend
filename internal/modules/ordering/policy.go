@@ -1,6 +1,9 @@
 package ordering
 
-import "pocket-mvp-backend/internal/appfault"
+import (
+	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/lifecycle"
+)
 
 type StatusChange struct {
 	ExpectedStatus string
@@ -28,7 +31,7 @@ func validateTransition(role, channel, current, target, expected string) error {
 	if expected != "" && current != expected {
 		return &StatusConflict{current}
 	}
-	if isFinalStatus(current) || (target != StatusCancelled && next(current) != target) {
+	if isFinalStatus(current) || (target != lifecycle.OrderCancelled && next(current) != target) {
 		return &StatusConflict{current}
 	}
 	return nil

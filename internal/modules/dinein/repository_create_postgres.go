@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"pocket-mvp-backend/internal/lifecycle"
+	"pocket-mvp-backend/internal/money"
 
 	"github.com/jackc/pgx/v5"
 	"pocket-mvp-backend/internal/appfault"
@@ -105,7 +107,7 @@ func findReplay(ctx context.Context, tx pgx.Tx, table Table, requestHash string,
 	return &order, err
 }
 
-func priceItems(ctx context.Context, tx pgx.Tx, table Table, input CreateInput) ([]orderstore.ItemSnapshot, int, int, error) {
+func priceItems(ctx context.Context, tx pgx.Tx, table Table, input CreateInput) ([]orderstore.ItemSnapshot, money.Minor, money.Minor, error) {
 	ids := make([]string, len(input.Items))
 	for i, item := range input.Items {
 		ids[i] = item.MenuItemID
@@ -115,7 +117,7 @@ func priceItems(ctx context.Context, tx pgx.Tx, table Table, input CreateInput) 
 		return nil, 0, 0, err
 	}
 	items := make([]orderstore.ItemSnapshot, 0, len(input.Items))
-	subtotal := int64(0)
+	subtotal := money.Minor(0)
 	// Validate in request order, even though the rows were locked in UUID order.
 	for _, item := range input.Items {
 		saved, ok := orderstore.MenuItemByID(menu, item.MenuItemID)
@@ -125,20 +127,20 @@ func priceItems(ctx context.Context, tx pgx.Tx, table Table, input CreateInput) 
 		if saved.PriceMinor != item.ExpectedPriceMinor {
 			return nil, 0, 0, ErrPriceChanged
 		}
-		subtotal += int64(saved.PriceMinor) * int64(item.Quantity)
+		subtotal += saved.PriceMinor.Times(item.Quantity)
 		items = append(items, orderstore.ItemSnapshot{MenuItemID: item.MenuItemID, Name: saved.Name, PriceMinor: saved.PriceMinor, Quantity: item.Quantity})
 	}
 	if subtotal > gratuity.MaxTotal {
 		return nil, 0, 0, appfault.ErrInvalidInput
 	}
-	tip, err := gratuity.Calculate(int(subtotal), input.Tip)
+	tip, err := gratuity.Calculate(subtotal, input.Tip)
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	if input.ExpectedTotalMinor != nil && *input.ExpectedTotalMinor != int(subtotal)+tip {
+	if input.ExpectedTotalMinor != nil && *input.ExpectedTotalMinor != subtotal+tip {
 		return nil, 0, 0, ErrPriceChanged
 	}
-	return items, int(subtotal), tip, nil
+	return items, subtotal, tip, nil
 }
 
 func lockOpenBill(ctx context.Context, tx pgx.Tx, table Table) (string, error) {
@@ -164,13 +166,13 @@ func lockOpenBill(ctx context.Context, tx pgx.Tx, table Table) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if status != "open" || payment {
+	if status != lifecycle.BillOpen || payment {
 		return "", ErrBillLocked
 	}
 	return billID, nil
 }
 
-func insertOrder(ctx context.Context, tx pgx.Tx, table Table, billID, requestHash string, subtotal int, input CreateInput) (string, error) {
+func insertOrder(ctx context.Context, tx pgx.Tx, table Table, billID, requestHash string, subtotal money.Minor, input CreateInput) (string, error) {
 	var id string
 	err := tx.QueryRow(ctx, `
  INSERT INTO orders (
@@ -190,7 +192,7 @@ func insertOrder(ctx context.Context, tx pgx.Tx, table Table, billID, requestHas
 	return id, err
 }
 
-func appendToBill(ctx context.Context, tx pgx.Tx, billID string, subtotal, tip int) error {
+func appendToBill(ctx context.Context, tx pgx.Tx, billID string, subtotal, tip money.Minor) error {
 	tag, err := tx.Exec(ctx, `
  UPDATE bills SET
    subtotal_minor = subtotal_minor + $2,

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"pocket-mvp-backend/internal/money"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -49,7 +50,7 @@ func TestTableOrderBatchIntegration(t *testing.T) {
 	names := make(map[string]string, 100)
 	for i := range inputs {
 		var id string
-		price := 100 + i
+		price := money.Minor(100 + i)
 		name := fmt.Sprintf("Dish %d", i)
 		must(db.QueryRow(ctx, `INSERT INTO menu_items(venue_id,category_id,name,price_minor) VALUES($1,$2,$3,$4) RETURNING id::text`, venueID, categoryID, name, price).Scan(&id))
 		inputs[i] = dinein.ItemInput{MenuItemID: strings.ToUpper(id), Quantity: i%3 + 1, ExpectedPriceMinor: price}
@@ -76,10 +77,10 @@ func TestTableOrderBatchIntegration(t *testing.T) {
 				}
 			}
 			input := dinein.CreateInput{Token: token, IdempotencyKey: fmt.Sprintf("batch-order-key-%d", size), Items: inputs[:size], Tip: &gratuity.Selection{Mode: "percent", Percent: 5}}
-			subtotal := 0
+			subtotal := money.Minor(0)
 			expected := map[string]dinein.ItemInput{}
 			for _, item := range input.Items {
-				subtotal += item.Quantity * item.ExpectedPriceMinor
+				subtotal += item.ExpectedPriceMinor.Times(item.Quantity)
 				expected[strings.ToLower(item.MenuItemID)] = item
 			}
 			tip, err := gratuity.Calculate(subtotal, input.Tip)

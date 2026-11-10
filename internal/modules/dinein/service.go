@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"regexp"
+	"pocket-mvp-backend/internal/validate"
 	"strings"
 	"unicode/utf8"
 
@@ -21,7 +21,6 @@ var (
 	ErrItemUnavailable = errors.New("item_unavailable")
 	ErrBillLocked      = errors.New("bill_locked")
 )
-var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 type Service struct {
 	repository Repository
@@ -57,7 +56,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (Order, error) 
 	}
 	seen := map[string]bool{}
 	for _, item := range input.Items {
-		if !uuidPattern.MatchString(item.MenuItemID) || item.Quantity < 1 || item.Quantity > 30 || item.ExpectedPriceMinor < 0 || seen[item.MenuItemID] {
+		if !validate.UUID(item.MenuItemID) || item.Quantity < 1 || item.Quantity > 30 || item.ExpectedPriceMinor < 0 || seen[item.MenuItemID] {
 			return Order{}, appfault.ErrInvalidInput
 		}
 		seen[item.MenuItemID] = true

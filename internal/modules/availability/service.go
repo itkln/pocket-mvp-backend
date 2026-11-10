@@ -2,7 +2,7 @@ package availability
 
 import (
 	"context"
-	"regexp"
+	"pocket-mvp-backend/internal/validate"
 	"time"
 
 	"pocket-mvp-backend/internal/appfault"
@@ -13,8 +13,6 @@ const (
 	slotStep    = 30 * time.Minute
 	bookingDays = 30
 )
-
-var datePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 type Table struct {
 	ID         string     `json:"id"`
@@ -64,7 +62,7 @@ func NewService(repository Repository) *Service {
 }
 
 func (s *Service) Get(ctx context.Context, venueID, date string, guests int) (Result, error) {
-	if !uuidPattern.MatchString(venueID) || guests < 1 || guests > 20 || (date != "" && !datePattern.MatchString(date)) {
+	if !validate.UUID(venueID) || guests < 1 || guests > 20 || (date != "" && !validate.Date(date)) {
 		return Result{}, appfault.ErrInvalidInput
 	}
 	venue, err := s.repository.GetVenue(ctx, venueID)
@@ -135,5 +133,3 @@ func (s *Service) Get(ctx context.Context, venueID, date string, guests int) (Re
 	}
 	return result, nil
 }
-
-var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)

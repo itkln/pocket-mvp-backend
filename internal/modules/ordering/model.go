@@ -1,6 +1,7 @@
 package ordering
 
 import (
+	"pocket-mvp-backend/internal/money"
 	"time"
 )
 
@@ -32,8 +33,8 @@ type Order struct {
 	Channel             string      `json:"channel"`
 	Source              string      `json:"source"`
 	GuestName           string      `json:"guest_name,omitempty"`
-	TipMinor            int         `json:"tip_minor"`
-	TotalMinor          int         `json:"total_minor"`
+	TipMinor            money.Minor `json:"tip_minor"`
+	TotalMinor          money.Minor `json:"total_minor"`
 	Currency            string      `json:"currency"`
 	Status              string      `json:"status"`
 	Notes               string      `json:"notes,omitempty"`
@@ -47,11 +48,11 @@ type Order struct {
 }
 
 type OrderItem struct {
-	ID             string `json:"id,omitempty"`
-	TotalMinor     int    `json:"total_minor"`
-	Notes          string `json:"notes,omitempty"`
-	Status         string `json:"status,omitempty"`
-	Name           string `json:"name"`
-	Quantity       int    `json:"quantity"`
-	UnitPriceMinor int    `json:"unit_price_minor"`
+	ID             string      `json:"id,omitempty"`
+	TotalMinor     money.Minor `json:"total_minor"`
+	Notes          string      `json:"notes,omitempty"`
+	Status         string      `json:"status,omitempty"`
+	Name           string      `json:"name"`
+	Quantity       int         `json:"quantity"`
+	UnitPriceMinor money.Minor `json:"unit_price_minor"`
 }

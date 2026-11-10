@@ -3,6 +3,7 @@ package reservations
 import (
 	"context"
 	"errors"
+	"pocket-mvp-backend/internal/lifecycle"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -31,10 +32,10 @@ func (r *PostgresRepository) Hold(ctx context.Context, venueID string, input Cre
 		if oldHash != hash {
 			return HoldResult{}, appfault.ErrConflict
 		}
-		if status == "confirmed" {
+		if status == lifecycle.ReservationConfirmed {
 			return existing, nil
 		}
-		if status != "pending" {
+		if status != lifecycle.ReservationPending {
 			return HoldResult{}, ErrHoldExpired
 		}
 		if !existing.ExpiresAt.After(time.Now()) {
@@ -107,7 +108,7 @@ func (r *PostgresRepository) Confirm(ctx context.Context, venueID, holdID string
 	if oldHoldHash != holdHash {
 		return Result{}, appfault.ErrConflict
 	}
-	if status == "confirmed" {
+	if status == lifecycle.ReservationConfirmed {
 		if oldConfirmationHash != confirmationHash {
 			return Result{}, appfault.ErrConflict
 		}
@@ -120,7 +121,7 @@ func (r *PostgresRepository) Confirm(ctx context.Context, venueID, holdID string
 		}
 		return found, nil
 	}
-	if status != "pending" {
+	if status != lifecycle.ReservationPending {
 		return Result{}, ErrHoldExpired
 	}
 	if !expiresAt.After(time.Now()) {

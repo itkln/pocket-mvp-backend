@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"pocket-mvp-backend/internal/money"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func orderstoreFixture(t *testing.T) (*pgxpool.Pool, string, string, string, []r
 	items := make([]reservations.PreorderItem, 10)
 	for i := range items {
 		var id string
-		price := 100 + i
+		price := money.Minor(100 + i)
 		must(db.QueryRow(ctx, `INSERT INTO menu_items(venue_id,category_id,name,price_minor) VALUES($1,$2,$3,$4) RETURNING id::text`, venue, category, fmt.Sprintf("Dish %d", i), price).Scan(&id))
 		items[i] = reservations.PreorderItem{MenuItemID: id, Quantity: i%3 + 1, ExpectedPriceMinor: price}
 	}
@@ -88,9 +89,9 @@ func TestPreorderBatchSnapshotsIntegration(t *testing.T) {
 	db, venue, _, table, items := orderstoreFixture(t)
 	ctx := context.Background()
 	repo := reservations.NewPostgresRepository(db)
-	subtotal := 0
+	subtotal := money.Minor(0)
 	for _, item := range items {
-		subtotal += item.Quantity * item.ExpectedPriceMinor
+		subtotal += item.ExpectedPriceMinor.Times(item.Quantity)
 	}
 	for _, held := range []bool{false, true} {
 		t.Run(fmt.Sprintf("held_%t", held), func(t *testing.T) {

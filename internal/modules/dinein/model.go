@@ -3,6 +3,7 @@ package dinein
 import (
 	"encoding/json"
 	"pocket-mvp-backend/internal/gratuity"
+	"pocket-mvp-backend/internal/money"
 	"time"
 )
 
@@ -21,13 +22,13 @@ type QRCode struct {
 	Encrypted string `json:"-"`
 }
 type ItemInput struct {
-	MenuItemID         string `json:"menu_item_id"`
-	Quantity           int    `json:"quantity"`
-	ExpectedPriceMinor int    `json:"expected_price_minor"`
+	MenuItemID         string      `json:"menu_item_id"`
+	Quantity           int         `json:"quantity"`
+	ExpectedPriceMinor money.Minor `json:"expected_price_minor"`
 }
 type CreateInput struct {
 	Tip                *gratuity.Selection `json:"tip,omitempty"`
-	ExpectedTotalMinor *int                `json:"expected_total_minor,omitempty"`
+	ExpectedTotalMinor *money.Minor        `json:"expected_total_minor,omitempty"`
 	Token              string              `json:"token"`
 	IdempotencyKey     string              `json:"idempotency_key"`
 	Notes              string              `json:"notes"`
@@ -42,20 +43,20 @@ type Item struct {
 	Modifiers      json.RawMessage `json:"modifiers,omitempty"`
 	Name           string          `json:"name"`
 	Quantity       int             `json:"quantity"`
-	UnitPriceMinor int             `json:"unit_price_minor"`
+	UnitPriceMinor money.Minor     `json:"unit_price_minor"`
 }
 type Order struct {
-	SubtotalMinor   int       `json:"subtotal_minor"`
-	TipMinor        int       `json:"tip_minor"`
-	VenueID         string    `json:"venue_id"`
-	QRVersion       *int      `json:"table_qr_version,omitempty"`
-	ID              string    `json:"id"`
-	Number          int64     `json:"number"`
-	Status          string    `json:"status"`
-	TableIdentifier string    `json:"table_identifier"`
-	TotalMinor      int       `json:"total_minor"`
-	Currency        string    `json:"currency"`
-	Notes           string    `json:"notes"`
-	CreatedAt       time.Time `json:"created_at"`
-	Items           []Item    `json:"items"`
+	SubtotalMinor   money.Minor `json:"subtotal_minor"`
+	TipMinor        money.Minor `json:"tip_minor"`
+	VenueID         string      `json:"venue_id"`
+	QRVersion       *int        `json:"table_qr_version,omitempty"`
+	ID              string      `json:"id"`
+	Number          int64       `json:"number"`
+	Status          string      `json:"status"`
+	TableIdentifier string      `json:"table_identifier"`
+	TotalMinor      money.Minor `json:"total_minor"`
+	Currency        string      `json:"currency"`
+	Notes           string      `json:"notes"`
+	CreatedAt       time.Time   `json:"created_at"`
+	Items           []Item      `json:"items"`
 }

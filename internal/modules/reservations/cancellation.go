@@ -2,6 +2,8 @@ package reservations
 
 import (
 	"encoding/json"
+	"pocket-mvp-backend/internal/lifecycle"
+	"pocket-mvp-backend/internal/validate"
 	"time"
 )
 
@@ -16,6 +18,14 @@ type CancellationDenied struct{ Reason string }
 
 func (e *CancellationDenied) Error() string { return e.Reason }
 
+// How long a booking with a preorder may be cancelled: until the waiter starts preparing it, or
+// until the visit. "accepted" is a legacy value from the kitchen workflow and means "preparing".
+const (
+	preorderUntilAccepted  = "accepted"
+	preorderUntilPreparing = "preparing"
+	preorderUntilVisit     = "visit"
+)
+
 type cancellationPolicy struct {
 	CutoffMinutes int    `json:"cutoff_minutes"`
 	PreorderUntil string `json:"preorder_until"`
@@ -25,12 +35,12 @@ type cancellationPolicy struct {
 // A venue may override this policy through settings.guest_cancellation.
 var defaultCancellationPolicy = &cancellationPolicy{
 	CutoffMinutes: 0,
-	PreorderUntil: "preparing",
+	PreorderUntil: preorderUntilPreparing,
 }
 
 func cancellationEligibility(status string, startsAt, now time.Time, rawPolicy json.RawMessage, preorderStatuses []string, paymentStarted bool) Cancellation {
 	result := Cancellation{}
-	if status != "confirmed" {
+	if status != lifecycle.ReservationConfirmed {
 		result.Reason = "cancellation_status_blocked"
 		return result
 	}
@@ -44,7 +54,7 @@ func cancellationEligibility(status string, startsAt, now time.Time, rawPolicy j
 		policy = &configured
 	}
 	if policy == nil || policy.CutoffMinutes < 0 || policy.CutoffMinutes > 43200 ||
-		(policy.PreorderUntil != "accepted" && policy.PreorderUntil != "preparing" && policy.PreorderUntil != "visit") {
+		!validate.OneOf(policy.PreorderUntil, preorderUntilAccepted, preorderUntilPreparing, preorderUntilVisit) {
 		result.Reason = "cancellation_policy_unset"
 		return result
 	}
@@ -61,7 +71,7 @@ func cancellationEligibility(status string, startsAt, now time.Time, rawPolicy j
 	// There is no accepted step any more: "accepted" and "preparing" both allow cancelling
 	// until the waiter starts preparing the preorder. Both values stay valid for stored policies.
 	for _, state := range preorderStatuses {
-		allowed := state == "draft" || state == "new" || state == "cancelled" || policy.PreorderUntil == "visit"
+		allowed := validate.OneOf(state, lifecycle.OrderDraft, lifecycle.OrderNew, lifecycle.OrderCancelled) || policy.PreorderUntil == preorderUntilVisit
 		if !allowed {
 			result.Reason = "cancellation_preorder_locked"
 			return result

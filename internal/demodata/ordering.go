@@ -3,6 +3,7 @@ package demodata
 import (
 	"context"
 	"fmt"
+	"pocket-mvp-backend/internal/lifecycle"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -86,11 +87,11 @@ func orderMenuItem(venueID string, index int) (string, string) {
 
 func orderItemStatus(orderStatus string) string {
 	switch orderStatus {
-	case "new", "preparing":
+	case lifecycle.OrderNew, lifecycle.OrderPreparing:
 		return orderStatus
-	case "cancelled":
-		return "cancelled"
+	case lifecycle.OrderCancelled:
+		return lifecycle.OrderCancelled
 	default:
-		return "served"
+		return lifecycle.OrderServed
 	}
 }

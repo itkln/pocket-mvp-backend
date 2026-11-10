@@ -2,15 +2,17 @@ package reservations
 
 import (
 	"context"
+	"pocket-mvp-backend/internal/money"
+	"pocket-mvp-backend/internal/validate"
 	"time"
 
 	"pocket-mvp-backend/internal/appfault"
 )
 
 type PreorderSnapshot struct {
-	Name           string `json:"name"`
-	Quantity       int    `json:"quantity"`
-	UnitPriceMinor int    `json:"unit_price_minor"`
+	Name           string      `json:"name"`
+	Quantity       int         `json:"quantity"`
+	UnitPriceMinor money.Minor `json:"unit_price_minor"`
 }
 
 type CustomerReservation struct {
@@ -29,8 +31,8 @@ type CustomerReservation struct {
 	GuestPhone          string             `json:"guest_phone,omitempty"`
 	GuestEmail          string             `json:"guest_email,omitempty"`
 	Notes               string             `json:"notes,omitempty"`
-	PreorderTipMinor    int                `json:"preorder_tip_minor"`
-	PreorderTotalMinor  int                `json:"preorder_total_minor"`
+	PreorderTipMinor    money.Minor        `json:"preorder_tip_minor"`
+	PreorderTotalMinor  money.Minor        `json:"preorder_total_minor"`
 	PreorderOrderNumber int64              `json:"preorder_order_number,omitempty"`
 	Currency            string             `json:"currency"`
 	PreorderItems       []PreorderSnapshot `json:"preorder_items"`
@@ -39,14 +41,14 @@ type CustomerReservation struct {
 }
 
 func (s *Service) CancelCustomer(ctx context.Context, customerID, reservationID string) (CustomerReservation, error) {
-	if !uuidPattern.MatchString(customerID) || !uuidPattern.MatchString(reservationID) {
+	if !validate.UUID(customerID) || !validate.UUID(reservationID) {
 		return CustomerReservation{}, appfault.ErrInvalidInput
 	}
 	return s.repository.CancelCustomer(ctx, customerID, reservationID)
 }
 
 func (s *Service) ListCustomer(ctx context.Context, customerID string) ([]CustomerReservation, error) {
-	if !uuidPattern.MatchString(customerID) {
+	if !validate.UUID(customerID) {
 		return nil, appfault.ErrInvalidInput
 	}
 	return s.repository.ListCustomer(ctx, customerID)

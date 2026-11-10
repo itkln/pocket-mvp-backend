@@ -1,40 +1,24 @@
 package ordering
 
 import (
+	"pocket-mvp-backend/internal/lifecycle"
 	"strings"
 
 	"pocket-mvp-backend/internal/access"
 )
 
-// Order statuses. A status is also a monotonic concurrency token: final orders cannot be reopened.
-const (
-	StatusDraft     = "draft"
-	StatusNew       = "new"
-	StatusPreparing = "preparing"
-	StatusServed    = "served"
-	StatusCompleted = "completed"
-	StatusCancelled = "cancelled"
-)
-
-// Order channels.
-const (
-	ChannelDineIn   = "dine_in"
-	ChannelOnline   = "online"
-	ChannelPreorder = "preorder"
-)
-
 var (
 	// Statuses a client may request, in workflow order; cancellation is allowed from any non-final status.
-	settableStatuses = []string{StatusNew, StatusPreparing, StatusServed, StatusCompleted, StatusCancelled}
-	activeStatuses   = []string{StatusNew, StatusPreparing, StatusServed}
-	finalStatuses    = []string{StatusCompleted, StatusCancelled}
-	channels         = []string{ChannelDineIn, ChannelPreorder, ChannelOnline}
+	settableStatuses = []string{lifecycle.OrderNew, lifecycle.OrderPreparing, lifecycle.OrderServed, lifecycle.OrderCompleted, lifecycle.OrderCancelled}
+	activeStatuses   = []string{lifecycle.OrderNew, lifecycle.OrderPreparing, lifecycle.OrderServed}
+	finalStatuses    = []string{lifecycle.OrderCompleted, lifecycle.OrderCancelled}
+	channels         = []string{lifecycle.ChannelDineIn, lifecycle.ChannelPreorder, lifecycle.ChannelOnline}
 	// The only status each status may advance to: the waiter marks the order as being prepared
 	// (passed to the kitchen), served, then completes it.
 	nextStatus = map[string]string{
-		StatusNew:       StatusPreparing,
-		StatusPreparing: StatusServed,
-		StatusServed:    StatusCompleted,
+		lifecycle.OrderNew:       lifecycle.OrderPreparing,
+		lifecycle.OrderPreparing: lifecycle.OrderServed,
+		lifecycle.OrderServed:    lifecycle.OrderCompleted,
 	}
 )
 

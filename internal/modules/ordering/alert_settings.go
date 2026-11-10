@@ -2,7 +2,7 @@ package ordering
 
 import (
 	"context"
-	"regexp"
+	"pocket-mvp-backend/internal/validate"
 
 	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
@@ -17,10 +17,8 @@ type AlertSettings struct {
 	CanEdit             bool   `json:"can_edit"`
 }
 
-var alertColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
-
 func (v AlertSettings) validate() error {
-	if v.WarningMinutes <= 0 || v.CriticalMinutes <= v.WarningMinutes || v.CriticalMinutes > 1440 || v.PreorderLeadMinutes < 0 || v.PreorderLeadMinutes > 1440 || !alertColor.MatchString(v.WarningColor) || !alertColor.MatchString(v.CriticalColor) {
+	if v.WarningMinutes <= 0 || v.CriticalMinutes <= v.WarningMinutes || v.CriticalMinutes > 1440 || v.PreorderLeadMinutes < 0 || v.PreorderLeadMinutes > 1440 || !validate.HexColor(v.WarningColor) || !validate.HexColor(v.CriticalColor) {
 		return appfault.ErrInvalidInput
 	}
 	return nil
@@ -32,7 +30,7 @@ type alertRepository interface {
 }
 
 func (s *Service) GetAlertSettings(ctx context.Context, user, venue string) (AlertSettings, error) {
-	if !uuidPattern.MatchString(venue) {
+	if !validate.UUID(venue) {
 		return AlertSettings{}, appfault.ErrInvalidInput
 	}
 	role, err := s.authorizer.OrderRole(ctx, user, venue)
@@ -44,7 +42,7 @@ func (s *Service) GetAlertSettings(ctx context.Context, user, venue string) (Ale
 	return v, err
 }
 func (s *Service) SaveAlertSettings(ctx context.Context, user, venue string, v AlertSettings) (AlertSettings, error) {
-	if !uuidPattern.MatchString(venue) {
+	if !validate.UUID(venue) {
 		return AlertSettings{}, appfault.ErrInvalidInput
 	}
 	role, err := s.authorizer.OrderRole(ctx, user, venue)

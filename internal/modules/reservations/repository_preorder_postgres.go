@@ -2,17 +2,18 @@ package reservations
 
 import (
 	"context"
+	"pocket-mvp-backend/internal/money"
 
 	"github.com/jackc/pgx/v5"
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/orderstore"
 )
 
-const maxPreorderSubtotal = 100_000_000
+const maxPreorderSubtotal money.Minor = 100_000_000
 
 // Both direct reservations and held-slot confirmation use the same locked menu
 // snapshot. Preorders additionally require category.preorder_enabled.
-func pricePreorder(ctx context.Context, tx pgx.Tx, venueID, currency string, input CreateInput) ([]orderstore.ItemSnapshot, int, error) {
+func pricePreorder(ctx context.Context, tx pgx.Tx, venueID, currency string, input CreateInput) ([]orderstore.ItemSnapshot, money.Minor, error) {
 	if len(input.Items) == 0 {
 		return nil, 0, nil
 	}
@@ -25,7 +26,7 @@ func pricePreorder(ctx context.Context, tx pgx.Tx, venueID, currency string, inp
 		return nil, 0, err
 	}
 	snapshots := make([]orderstore.ItemSnapshot, 0, len(input.Items))
-	total := int64(0)
+	total := money.Minor(0)
 	for _, item := range input.Items {
 		saved, ok := orderstore.MenuItemByID(menu, item.MenuItemID)
 		if !ok {
@@ -37,13 +38,13 @@ func pricePreorder(ctx context.Context, tx pgx.Tx, venueID, currency string, inp
 		if saved.PriceMinor != item.ExpectedPriceMinor {
 			return nil, 0, ErrPriceChanged
 		}
-		total += int64(saved.PriceMinor) * int64(item.Quantity)
+		total += saved.PriceMinor.Times(item.Quantity)
 		if saved.PriceMinor > maxPreorderSubtotal || total > maxPreorderSubtotal {
 			return nil, 0, appfault.ErrInvalidInput
 		}
 		snapshots = append(snapshots, orderstore.ItemSnapshot{MenuItemID: item.MenuItemID, Name: saved.Name, PriceMinor: saved.PriceMinor, Quantity: item.Quantity})
 	}
-	return snapshots, int(total), nil
+	return snapshots, total, nil
 }
 
 func insertPreorder(ctx context.Context, tx pgx.Tx, venueID, tableID string, input CreateInput, result *Result, items []orderstore.ItemSnapshot) error {

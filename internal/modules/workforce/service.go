@@ -4,16 +4,14 @@ import (
 	"context"
 	"net/mail"
 	"pocket-mvp-backend/internal/access"
-	"regexp"
+	"pocket-mvp-backend/internal/lifecycle"
+	"pocket-mvp-backend/internal/validate"
 	"strings"
 
 	"pocket-mvp-backend/internal/appfault"
 )
 
-var (
-	staffRolePattern   = regexp.MustCompile(`^(manager|waiter)$`)
-	staffStatusPattern = regexp.MustCompile(`^(invited|active|inactive)$`)
-)
+var ()
 
 type VenueAuthorizer interface {
 	Require(context.Context, string, string, access.Capability) error
@@ -52,9 +50,9 @@ func (s *Service) Create(ctx context.Context, ownerID, venueID string, input Sta
 	}
 	member, err := s.repository.Create(ctx, ownerID, venueID, input)
 	if err == nil && s.invites.Sender != nil {
-		member.InviteDelivery = "sent"
+		member.InviteDelivery = deliverySent
 		if sendErr := s.SendInvitation(ctx, ownerID, venueID, member.ID); sendErr != nil {
-			member.InviteDelivery = "failed"
+			member.InviteDelivery = deliveryFailed
 		}
 	}
 	return member, err
@@ -68,9 +66,9 @@ func (s *Service) Update(ctx context.Context, ownerID, venueID, staffID string, 
 		return StaffMember{}, appfault.ErrInvalidInput
 	}
 	if input.Status == "" {
-		input.Status = "invited"
+		input.Status = lifecycle.StaffInvited
 	}
-	if !staffStatusPattern.MatchString(input.Status) {
+	if !validate.OneOf(input.Status, lifecycle.StaffStatuses...) {
 		return StaffMember{}, appfault.ErrInvalidInput
 	}
 	return s.repository.Update(ctx, venueID, staffID, input)
@@ -83,6 +81,12 @@ func (s *Service) Delete(ctx context.Context, ownerID, venueID, staffID string) 
 	return s.repository.Delete(ctx, venueID, staffID)
 }
 
+// Whether the invitation email reached the mail server when a member was added.
+const (
+	deliverySent   = "sent"
+	deliveryFailed = "failed"
+)
+
 func validRole(value string) bool {
-	return staffRolePattern.MatchString(value)
+	return validate.OneOf(value, access.RoleManager, access.RoleWaiter)
 }

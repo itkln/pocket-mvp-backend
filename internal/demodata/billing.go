@@ -3,6 +3,7 @@ package demodata
 import (
 	"context"
 	"fmt"
+	"pocket-mvp-backend/internal/money"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,7 +14,7 @@ type paymentSeed struct {
 	OrderID     string
 	ProviderID  string
 	Status      string
-	AmountMinor int
+	AmountMinor money.Minor
 	Refunded    int
 	CreatedAt   time.Time
 }

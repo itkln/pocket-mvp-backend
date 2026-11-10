@@ -1,6 +1,9 @@
 package demodata
 
-import "time"
+import (
+	"pocket-mvp-backend/internal/money"
+	"time"
+)
 
 const (
 	demoOwnerID      = "10000000-0000-4000-8000-000000000001"
@@ -37,7 +40,7 @@ type itemSeed struct {
 	CategoryID  string
 	Name        string
 	Description string
-	PriceMinor  int
+	PriceMinor  money.Minor
 	Available   bool
 	Popular     bool
 	SortOrder   int
@@ -82,7 +85,7 @@ type orderSeed struct {
 	Channel    string
 	Status     string
 	GuestName  string
-	TotalMinor int
+	TotalMinor money.Minor
 	Notes      string
 	CreatedAt  time.Time
 }

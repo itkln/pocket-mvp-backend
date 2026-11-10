@@ -6,13 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"pocket-mvp-backend/internal/appfault"
-	"regexp"
+	"pocket-mvp-backend/internal/validate"
 	"sort"
 	"strings"
 	"time"
 )
-
-var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type Query struct {
 	Search   string
@@ -39,14 +37,20 @@ type orderCursor struct {
 	ID        string    `json:"id"`
 }
 
+// Queue scopes: orders still in service, or finished ones.
+const (
+	ScopeActive  = "active"
+	ScopeHistory = "history"
+)
+
 func (q *Query) normalize(venueID string) error {
-	if !uuidPattern.MatchString(venueID) {
+	if !validate.UUID(venueID) {
 		return appfault.ErrInvalidInput
 	}
 	if q.Scope == "" {
-		q.Scope = "active"
+		q.Scope = ScopeActive
 	}
-	if q.Scope != "active" && q.Scope != "history" {
+	if !validate.OneOf(q.Scope, ScopeActive, ScopeHistory) {
 		return appfault.ErrInvalidInput
 	}
 	if q.Limit == 0 {
@@ -58,7 +62,7 @@ func (q *Query) normalize(venueID string) error {
 	if q.Channel != "" && !isChannel(q.Channel) {
 		return appfault.ErrInvalidInput
 	}
-	if q.TableID != "" && !uuidPattern.MatchString(q.TableID) {
+	if q.TableID != "" && !validate.UUID(q.TableID) {
 		return appfault.ErrInvalidInput
 	}
 	q.Search = strings.TrimSpace(q.Search)
@@ -79,7 +83,7 @@ func (q *Query) normalize(venueID string) error {
 	q.TableID = strings.ToLower(q.TableID)
 	unique := map[string]bool{}
 	for _, status := range q.Statuses {
-		if !isSettableStatus(status) || isFinalStatus(status) != (q.Scope == "history") {
+		if !isSettableStatus(status) || isFinalStatus(status) != (q.Scope == ScopeHistory) {
 			return appfault.ErrInvalidInput
 		}
 		unique[status] = true
@@ -99,7 +103,7 @@ func (q *Query) normalize(venueID string) error {
 			return appfault.ErrInvalidInput
 		}
 		var cursor orderCursor
-		if json.Unmarshal(raw, &cursor) != nil || cursor.Version != 1 || cursor.Key != q.key(venueID) || cursor.CreatedAt.IsZero() || !uuidPattern.MatchString(cursor.ID) {
+		if json.Unmarshal(raw, &cursor) != nil || cursor.Version != 1 || cursor.Key != q.key(venueID) || cursor.CreatedAt.IsZero() || !validate.UUID(cursor.ID) {
 			return appfault.ErrInvalidInput
 		}
 		q.after = &cursor

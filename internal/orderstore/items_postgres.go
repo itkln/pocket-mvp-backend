@@ -4,6 +4,7 @@ package orderstore
 
 import (
 	"context"
+	"pocket-mvp-backend/internal/money"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -11,7 +12,7 @@ import (
 
 type MenuItem struct {
 	Name       string
-	PriceMinor int
+	PriceMinor money.Minor
 	Currency   string
 }
 
@@ -53,7 +54,7 @@ func MenuItemByID(items map[string]MenuItem, id string) (MenuItem, bool) {
 type ItemSnapshot struct {
 	MenuItemID string
 	Name       string
-	PriceMinor int
+	PriceMinor money.Minor
 	Quantity   int
 }
 
@@ -85,13 +86,13 @@ func InsertPreorderItems(ctx context.Context, tx pgx.Tx, reservationID string, i
 	return err
 }
 
-func snapshotArrays(items []ItemSnapshot) ([]string, []string, []int, []int) {
+func snapshotArrays(items []ItemSnapshot) ([]string, []string, []int64, []int) {
 	ids := make([]string, len(items))
 	names := make([]string, len(items))
-	prices := make([]int, len(items))
+	prices := make([]int64, len(items))
 	quantities := make([]int, len(items))
 	for i, item := range items {
-		ids[i], names[i], prices[i], quantities[i] = item.MenuItemID, item.Name, item.PriceMinor, item.Quantity
+		ids[i], names[i], prices[i], quantities[i] = item.MenuItemID, item.Name, int64(item.PriceMinor), item.Quantity
 	}
 	return ids, names, prices, quantities
 }

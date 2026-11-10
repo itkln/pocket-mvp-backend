@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"regexp"
+	"pocket-mvp-backend/internal/validate"
 	"strings"
 	"unicode/utf8"
 
@@ -17,7 +17,6 @@ import (
 var ErrPriceChanged = errors.New("preorder price changed")
 var ErrItemUnavailable = errors.New("preorder item unavailable")
 var ErrHoldExpired = errors.New("reservation hold expired")
-var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
 type Service struct {
 	repository   Repository
@@ -43,15 +42,15 @@ func normalizeAndValidate(venueID string, input CreateInput) (CreateInput, error
 	input.GuestPhone = strings.TrimSpace(input.GuestPhone)
 	input.GuestEmail = strings.TrimSpace(input.GuestEmail)
 	input.Notes = strings.TrimSpace(input.Notes)
-	if !uuidPattern.MatchString(venueID) || input.StartsAt.IsZero() || input.Guests < 1 || input.Guests > 20 || len(input.GuestName) < 2 || len(input.GuestName) > 120 ||
+	if !validate.UUID(venueID) || input.StartsAt.IsZero() || input.Guests < 1 || input.Guests > 20 || len(input.GuestName) < 2 || len(input.GuestName) > 120 ||
 		(input.GuestPhone == "" && input.GuestEmail == "") || (input.GuestPhone != "" && len(input.GuestPhone) < 5) || len(input.GuestPhone) > 40 || len(input.GuestEmail) > 254 || utf8.RuneCountInString(input.Notes) > 500 ||
-		(input.CustomerUserID != "" && !uuidPattern.MatchString(input.CustomerUserID)) ||
+		(input.CustomerUserID != "" && !validate.UUID(input.CustomerUserID)) ||
 		len(input.Items) > 30 || len(input.IdempotencyKey) < 16 || len(input.IdempotencyKey) > 128 {
 		return CreateInput{}, appfault.ErrInvalidInput
 	}
 	seen := make(map[string]bool, len(input.Items))
 	for _, item := range input.Items {
-		if !uuidPattern.MatchString(item.MenuItemID) || item.Quantity < 1 || item.Quantity > 30 || item.ExpectedPriceMinor < 0 || seen[item.MenuItemID] {
+		if !validate.UUID(item.MenuItemID) || item.Quantity < 1 || item.Quantity > 30 || item.ExpectedPriceMinor < 0 || seen[item.MenuItemID] {
 			return CreateInput{}, appfault.ErrInvalidInput
 		}
 		seen[item.MenuItemID] = true
@@ -130,14 +129,14 @@ func (s *Service) Hold(ctx context.Context, venueID string, input CreateInput) (
 func (s *Service) Confirm(ctx context.Context, venueID, holdID string, input CreateInput) (Result, error) {
 	var err error
 	input, err = normalizeAndValidate(venueID, input)
-	if err != nil || !uuidPattern.MatchString(holdID) {
+	if err != nil || !validate.UUID(holdID) {
 		return Result{}, appfault.ErrInvalidInput
 	}
 	return s.repository.Confirm(ctx, venueID, holdID, input, holdHash(input), requestHash(input))
 }
 
 func (s *Service) GetConfirmed(ctx context.Context, venueID, reservationID, key string) (Result, error) {
-	if !uuidPattern.MatchString(venueID) || !uuidPattern.MatchString(reservationID) || len(key) < 16 || len(key) > 128 {
+	if !validate.UUID(venueID) || !validate.UUID(reservationID) || len(key) < 16 || len(key) > 128 {
 		return Result{}, appfault.ErrInvalidInput
 	}
 	return s.repository.GetConfirmed(ctx, venueID, reservationID, key)

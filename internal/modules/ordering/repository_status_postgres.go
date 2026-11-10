@@ -3,6 +3,7 @@ package ordering
 import (
 	"context"
 	"errors"
+	"pocket-mvp-backend/internal/lifecycle"
 
 	"github.com/jackc/pgx/v5"
 	"pocket-mvp-backend/internal/access"
@@ -17,7 +18,7 @@ func (r *PostgresRepository) UpdateStatus(ctx context.Context, venueID, orderID,
 		return Order{}, err
 	}
 	defer tx.Rollback(ctx)
-	role := "owner"
+	role := access.RoleOwner
 	var change StatusChange
 	if len(changes) > 0 {
 		change = changes[0]
@@ -54,7 +55,7 @@ func (r *PostgresRepository) UpdateStatus(ctx context.Context, venueID, orderID,
 		}
 		return Order{}, err
 	}
-	if status == "cancelled" && state.status != "cancelled" {
+	if status == lifecycle.OrderCancelled && state.status != lifecycle.OrderCancelled {
 		if err = cancelOrderContribution(ctx, tx, orderID, state.billID); err != nil {
 			return Order{}, err
 		}
@@ -96,7 +97,7 @@ func lockStatusChange(ctx context.Context, tx pgx.Tx, venueID, orderID, status, 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return lockedOrder{}, err
 	}
-	if status == "cancelled" && state.status != "cancelled" {
+	if status == lifecycle.OrderCancelled && state.status != lifecycle.OrderCancelled {
 		var hasPayment bool
 		if err = tx.QueryRow(ctx, `
             SELECT EXISTS (
@@ -108,7 +109,7 @@ func lockStatusChange(ctx context.Context, tx pgx.Tx, venueID, orderID, status, 
             )`, orderID, state.billID).Scan(&hasPayment); err != nil {
 			return lockedOrder{}, err
 		}
-		if hasPayment || (state.billID != "" && state.billStatus != "open") {
+		if hasPayment || (state.billID != "" && state.billStatus != lifecycle.BillOpen) {
 			return lockedOrder{}, &StatusConflict{state.status}
 		}
 	}

@@ -35,7 +35,7 @@ func (r *PostgresRepository) ListPage(ctx context.Context, venueID string, query
 	}
 	predicate := `o.status IN (` + sqlStatuses(activeStatuses) + `)`
 	direction, comparison := "ASC", ">"
-	if query.Scope == "history" {
+	if query.Scope == ScopeHistory {
 		predicate = `o.status IN (` + sqlStatuses(finalStatuses) + `)`
 		direction, comparison = "DESC", "<"
 	}

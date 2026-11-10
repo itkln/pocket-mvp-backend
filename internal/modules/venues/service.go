@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"pocket-mvp-backend/internal/lifecycle"
+	"pocket-mvp-backend/internal/validate"
 	"regexp"
 	"strings"
 
@@ -79,9 +81,7 @@ func (s *Service) IsPublished(ctx context.Context, venueID string) (bool, error)
 	return s.repository.IsPublished(ctx, venueID)
 }
 
-var venueIDPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
-func validVenueID(id string) bool { return venueIDPattern.MatchString(id) }
+func validVenueID(id string) bool { return validate.UUID(id) }
 
 func (s *Service) Create(ctx context.Context, ownerID string, input Input) (Venue, error) {
 	input = normalizeInput(input)
@@ -149,7 +149,7 @@ func normalizeInput(input Input) Input {
 		input.Currency = "EUR"
 	}
 	if input.Status == "" {
-		input.Status = "draft"
+		input.Status = lifecycle.VenueDraft
 	}
 	if input.Settings == nil {
 		input.Settings = map[string]any{}
@@ -158,9 +158,12 @@ func normalizeInput(input Input) Input {
 }
 
 func validInput(input Input) bool {
-	validStatus := regexp.MustCompile(`^(draft|active|paused|closed)$`).MatchString(input.Status)
-	return input.Name != "" && input.City != "" && len(input.CountryCode) == 2 && len(input.Currency) == 3 && validStatus
+	return input.Name != "" && input.City != "" && len(input.CountryCode) == 2 && len(input.Currency) == 3 &&
+		validate.OneOf(input.Status, lifecycle.VenueStatuses...)
 }
+
+// slugSeparators are the runs of characters a slug replaces with a dash.
+var slugSeparators = regexp.MustCompile(`[^a-z0-9]+`)
 
 func uniqueSlug(name string) (string, error) {
 	token, err := security.NewSessionToken()
@@ -183,7 +186,7 @@ func uniqueSlug(name string) (string, error) {
 
 func slugify(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
-	value = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(value, "-")
+	value = slugSeparators.ReplaceAllString(value, "-")
 	return strings.Trim(value, "-")
 }
 

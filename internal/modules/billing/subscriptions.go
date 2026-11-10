@@ -2,14 +2,10 @@ package billing
 
 import (
 	"context"
-	"regexp"
+	"pocket-mvp-backend/internal/lifecycle"
+	"pocket-mvp-backend/internal/validate"
 
 	"pocket-mvp-backend/internal/appfault"
-)
-
-var (
-	planPattern         = regexp.MustCompile(`^(start|business|pro)$`)
-	billingCyclePattern = regexp.MustCompile(`^(monthly|yearly)$`)
 )
 
 func (s *Service) GetSubscription(ctx context.Context, ownerID string) (*Subscription, error) {
@@ -17,7 +13,7 @@ func (s *Service) GetSubscription(ctx context.Context, ownerID string) (*Subscri
 }
 
 func (s *Service) UpsertSubscription(ctx context.Context, ownerID string, input SubscriptionInput) (Subscription, error) {
-	if !planPattern.MatchString(input.Plan) || !billingCyclePattern.MatchString(input.BillingCycle) {
+	if !validate.OneOf(input.Plan, lifecycle.Plans...) || !validate.OneOf(input.BillingCycle, lifecycle.BillingCycles...) {
 		return Subscription{}, appfault.ErrInvalidInput
 	}
 	venueLimit := limitForPlan(input.Plan)
@@ -33,10 +29,10 @@ func (s *Service) UpsertSubscription(ctx context.Context, ownerID string, input 
 
 func limitForPlan(plan string) *int {
 	switch plan {
-	case "start":
+	case lifecycle.PlanStart:
 		value := 1
 		return &value
-	case "business":
+	case lifecycle.PlanBusiness:
 		value := 3
 		return &value
 	default:

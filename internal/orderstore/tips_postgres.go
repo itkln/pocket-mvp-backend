@@ -2,13 +2,14 @@ package orderstore
 
 import (
 	"context"
+	"pocket-mvp-backend/internal/money"
 
 	"github.com/jackc/pgx/v5"
 )
 
 // ApplyOrderTip is part of the order transaction. These are pending tips, not paid income.
 // Payment initiation must use the persisted order total; only settlement may mark tips paid.
-func ApplyOrderTip(ctx context.Context, tx pgx.Tx, venueID, orderID, currency string, amount int) error {
+func ApplyOrderTip(ctx context.Context, tx pgx.Tx, venueID, orderID, currency string, amount money.Minor) error {
 	if amount == 0 {
 		return nil
 	}

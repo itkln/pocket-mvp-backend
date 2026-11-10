@@ -6,6 +6,7 @@ import (
 	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/modules/dinein"
 	"pocket-mvp-backend/internal/modules/ordering"
+	"pocket-mvp-backend/internal/money"
 	"pocket-mvp-backend/internal/security"
 	"strings"
 	"testing"
@@ -60,7 +61,7 @@ func TestTableOrderWithoutPrepaymentIntegration(t *testing.T) {
 		if i == 0 {
 			visit = bill.ID
 		}
-		if bill.ID != visit || bill.Status != "open" || bill.TotalMinor != int64((i+1)*1200) {
+		if bill.ID != visit || bill.Status != "open" || bill.TotalMinor != money.Minor((i+1)*1200) {
 			t.Fatalf("wrong unpaid visit: %+v", bill)
 		}
 		detail, err := queue.Get(ctx, ownerID, venueID, order.ID)

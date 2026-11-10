@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"pocket-mvp-backend/internal/money"
 	"strings"
 	"sync"
 	"testing"
@@ -45,7 +46,7 @@ func TestGratuityIntegration(t *testing.T) {
 	qr, err := service.OwnerQRCode(ctx, ownerID, venueID, "07", false)
 	must(err)
 	token := qr.URL[strings.LastIndex(qr.URL, "/")+1:]
-	expected := 1145
+	expected := money.Minor(1145)
 	input := dinein.CreateInput{Token: token, IdempotencyKey: "e14-percent-order-test", Tip: &gratuity.Selection{Mode: "percent", Percent: 5}, ExpectedTotalMinor: &expected,
 		Items: []dinein.ItemInput{{MenuItemID: itemID, Quantity: 1, ExpectedPriceMinor: 1090}}}
 	created, err := service.Create(ctx, input)
@@ -99,7 +100,7 @@ func TestGratuityIntegration(t *testing.T) {
 	}
 	tampered := input
 	tampered.IdempotencyKey = "e14-tampered-total-test"
-	wrong := 1090
+	wrong := money.Minor(1090)
 	tampered.ExpectedTotalMinor = &wrong
 	if _, err := service.Create(ctx, tampered); !errors.Is(err, dinein.ErrPriceChanged) {
 		t.Fatalf("tampered total accepted: %v", err)
@@ -172,7 +173,7 @@ func TestGratuityIntegration(t *testing.T) {
 	start := time.Now().Add(48 * time.Hour).Truncate(time.Hour)
 	reservation := reservations.CreateInput{StartsAt: start, Guests: 2, GuestName: "Tips Guest", GuestPhone: "+421900000000", CustomerUserID: ownerID,
 		IdempotencyKey: "e14-preorder-hold-test", Items: []reservations.PreorderItem{{MenuItemID: itemID, Quantity: 1, ExpectedPriceMinor: 1200}}}
-	grand := 1200
+	grand := money.Minor(1200)
 	reservation.ExpectedTotalMinor = &grand
 	hold, err := booking.Hold(ctx, venueID, reservation)
 	must(err)

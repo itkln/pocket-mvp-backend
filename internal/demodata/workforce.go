@@ -3,6 +3,7 @@ package demodata
 import (
 	"context"
 	"fmt"
+	"pocket-mvp-backend/internal/lifecycle"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -10,7 +11,7 @@ import (
 func seedWorkforce(ctx context.Context, tx pgx.Tx, ownerID, venueID string) error {
 	for _, member := range workforceMembers(venueID) {
 		acceptedAt := any(nil)
-		if member.Status == "active" {
+		if member.Status == lifecycle.StaffActive {
 			acceptedAt = "now()"
 		}
 		_, err := tx.Exec(ctx, `
