@@ -2,12 +2,12 @@
 -- new -> preparing -> served -> completed, there is no pickup, and venue staff are
 -- managers or waiters.
 
--- Orders in removed statuses or the removed channel are deleted. Their contribution
--- leaves open bills exactly as a cancellation would remove it.
+-- Orders in the removed accepted/ready statuses are deleted. Their contribution leaves
+-- open bills exactly as a cancellation would remove it.
 CREATE TEMP TABLE removed_orders AS
   SELECT id, bill_id, status, subtotal_minor, tip_minor, total_minor
   FROM orders
-  WHERE status IN ('accepted', 'ready') OR channel = 'pickup';
+  WHERE status IN ('accepted', 'ready');
 
 UPDATE bills b SET
   subtotal_minor = b.subtotal_minor - r.subtotal_minor,
@@ -23,12 +23,16 @@ FROM (
 WHERE b.id = r.bill_id;
 
 DELETE FROM order_status_events WHERE order_id IN (SELECT id FROM removed_orders);
+-- A payment must reference a bill or an order; payments of a removed order alone go with it.
+DELETE FROM payments WHERE bill_id IS NULL AND order_id IN (SELECT id FROM removed_orders);
 DELETE FROM orders WHERE id IN (SELECT id FROM removed_orders);
 DROP TABLE removed_orders;
 
 ALTER TABLE orders DROP CONSTRAINT orders_status_check;
 ALTER TABLE orders ADD CONSTRAINT orders_status_check
   CHECK (status IN ('draft', 'new', 'preparing', 'served', 'completed', 'cancelled'));
+-- Pickup orders keep their history, payments and reviews as online orders.
+UPDATE orders SET channel = 'online' WHERE channel = 'pickup';
 ALTER TABLE orders DROP CONSTRAINT orders_channel_check;
 ALTER TABLE orders ADD CONSTRAINT orders_channel_check
   CHECK (channel IN ('dine_in', 'online', 'preorder'));

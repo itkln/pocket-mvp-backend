@@ -6,8 +6,9 @@ import (
 	"testing"
 )
 
-// Migration 000025 removes kitchen-era data: orders in accepted/ready or on pickup are deleted
-// with their contribution taken out of open bills, kitchen and viewer staff become inactive waiters.
+// Migration 000025 removes kitchen-era data: orders in accepted/ready are deleted with their
+// contribution taken out of open bills and with payments that only they referenced, pickup orders
+// become online orders, kitchen and viewer staff become inactive waiters.
 func TestOrdersWithoutKitchenMigrationIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
@@ -45,7 +46,9 @@ func TestOrdersWithoutKitchenMigrationIntegration(t *testing.T) {
 	kept := order("dine_in", "preparing", 1000, 100)
 	order("dine_in", "accepted", 2000, 100)
 	order("dine_in", "ready", 1500, 100)
-	order("pickup", "cancelled", 1500, 0) // cancelled orders were already out of the bill
+	pickup := order("pickup", "cancelled", 1500, 0) // kept as an online order
+	var pickupPayment, billPayment string
+	must(db.QueryRow(ctx, `INSERT INTO payments(venue_id,order_id,provider,provider_payment_id,status,amount_minor,currency) VALUES($1,$2,'manual','pickup-payment','refunded',1500,'EUR') RETURNING id::text`, venue, pickup).Scan(&pickupPayment))
 	var readyItemOrder string
 	must(db.QueryRow(ctx, `INSERT INTO orders(venue_id,channel,status) VALUES($1,'dine_in','served') RETURNING id::text`, venue).Scan(&readyItemOrder))
 	_, err := db.Exec(ctx, `INSERT INTO order_items(order_id,item_name,quantity,unit_price_minor,total_minor,status) VALUES($1,'Tea',1,300,300,'ready')`, readyItemOrder)
@@ -53,6 +56,11 @@ func TestOrdersWithoutKitchenMigrationIntegration(t *testing.T) {
 	removedID := order("dine_in", "accepted", 0, 0)
 	_, err = db.Exec(ctx, `INSERT INTO order_status_events(order_id,actor_name,previous_status,new_status) VALUES($1,'Owner','new','accepted')`, removedID)
 	must(err)
+	// A payment of a removed order alone goes with it; one that also references a bill stays.
+	removedReady := order("online", "ready", 900, 0)
+	_, err = db.Exec(ctx, `INSERT INTO payments(venue_id,order_id,provider,provider_payment_id,status,amount_minor,currency) VALUES($1,$2,'manual','ready-payment','processing',900,'EUR')`, venue, removedReady)
+	must(err)
+	must(db.QueryRow(ctx, `INSERT INTO payments(venue_id,bill_id,order_id,provider,provider_payment_id,status,amount_minor,currency) VALUES($1,$2,$3,'manual','bill-payment','processing',2000,'EUR') RETURNING id::text`, venue, bill, removedID).Scan(&billPayment))
 	for _, role := range []string{"kitchen", "viewer", "waiter"} {
 		_, err := db.Exec(ctx, `INSERT INTO venue_staff(venue_id,invited_email,role,status,invited_by_user_id,invite_token_hash) VALUES($1,$2,$3,'active',$4,$2)`,
 			venue, role+"@kitchen-migration.test", role, owner)
@@ -63,13 +71,24 @@ func TestOrdersWithoutKitchenMigrationIntegration(t *testing.T) {
 
 	var orders, keptCount int
 	must(db.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE id=$2) FROM orders WHERE venue_id=$1`, venue, kept).Scan(&orders, &keptCount))
-	if orders != 2 || keptCount != 1 {
+	if orders != 3 || keptCount != 1 {
 		t.Fatalf("orders after migration: %d, kept %d", orders, keptCount)
 	}
 	var subtotal, tip, total int
 	must(db.QueryRow(ctx, `SELECT subtotal_minor,tip_minor,total_minor FROM bills WHERE id=$1`, bill).Scan(&subtotal, &tip, &total))
-	if subtotal != 2500 || tip != 100 || total != 2600 {
+	if subtotal != 1600 || tip != 100 || total != 1700 {
 		t.Fatalf("bill after migration: %d %d %d", subtotal, tip, total)
+	}
+	var pickupChannel string
+	must(db.QueryRow(ctx, `SELECT channel FROM orders WHERE id=$1`, pickup).Scan(&pickupChannel))
+	if pickupChannel != "online" {
+		t.Fatalf("pickup order became %s", pickupChannel)
+	}
+	var payments int
+	var keptPickupPayment, keptBillPayment bool
+	must(db.QueryRow(ctx, `SELECT count(*), bool_or(id=$2), bool_or(id=$3 AND order_id IS NULL) FROM payments WHERE venue_id=$1`, venue, pickupPayment, billPayment).Scan(&payments, &keptPickupPayment, &keptBillPayment))
+	if payments != 2 || !keptPickupPayment || !keptBillPayment {
+		t.Fatalf("payments after migration: %d, pickup kept %v, bill payment kept %v", payments, keptPickupPayment, keptBillPayment)
 	}
 	var itemStatus string
 	must(db.QueryRow(ctx, `SELECT status FROM order_items WHERE order_id=$1`, readyItemOrder).Scan(&itemStatus))

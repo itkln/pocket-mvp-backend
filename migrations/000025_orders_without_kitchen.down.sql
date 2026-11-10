@@ -1,5 +1,5 @@
--- Restores the wider constraints. Deleted orders and former kitchen/viewer roles
--- are not restored.
+-- Restores the wider constraints. Deleted orders and their payments, former pickup
+-- channels and former kitchen/viewer roles are not restored.
 ALTER TABLE venue_staff DROP CONSTRAINT venue_staff_role_check;
 ALTER TABLE venue_staff ADD CONSTRAINT venue_staff_role_check
   CHECK (role IN ('manager', 'waiter', 'kitchen', 'viewer'));
