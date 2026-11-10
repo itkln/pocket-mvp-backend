@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
 	"strings"
 )
 
-func (s *Service) OwnerQRCode(ctx context.Context, ownerID, venueID, identifier string, rotate bool) (QRCode, error) {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+func (s *Service) OwnerQRCode(ctx context.Context, userID, venueID, identifier string, rotate bool) (QRCode, error) {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageFloor); err != nil {
 		return QRCode{}, err
 	}
 	identifier = strings.TrimSpace(identifier)

@@ -91,9 +91,13 @@ interfaces.
 
 ## Shared policies
 
-`access.VenueAuthorizer` implements the ownership policy for venue-scoped
-operations. Modules consume only its `RequireOwner` method. It can later be
-replaced by signed claims, an RPC client, or a local ownership projection.
+`access.VenueAuthorizer` implements the access policy for venue-scoped
+operations. Modules ask for a capability — `ManageOrders`, `ManageMenu`,
+`ManageFloor` or `ManageVenue` — through `Require`, never for a role; the role
+to capability map lives in `access/policy.go` (owner: all; manager: orders,
+menu, floor; waiter: orders). A user without the capability gets the same 404
+as a stranger. It can later be replaced by signed claims, an RPC client, or a
+local membership projection.
 
 `access.CapabilityReader` provides identity with an account capability
 projection without making identity import venue or workforce packages.

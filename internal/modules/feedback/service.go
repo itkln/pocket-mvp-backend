@@ -2,6 +2,7 @@ package feedback
 
 import (
 	"context"
+	"pocket-mvp-backend/internal/access"
 	"strings"
 	"unicode/utf8"
 
@@ -9,7 +10,7 @@ import (
 )
 
 type VenueAuthorizer interface {
-	RequireOwner(context.Context, string, string) error
+	Require(context.Context, string, string, access.Capability) error
 }
 
 type Service struct {
@@ -22,14 +23,14 @@ func NewService(repository Repository, authorizer VenueAuthorizer) *Service {
 }
 
 func (s *Service) List(ctx context.Context, ownerID, venueID string) ([]Review, error) {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+	if err := s.authorizer.Require(ctx, ownerID, venueID, access.ManageVenue); err != nil {
 		return nil, err
 	}
 	return s.repository.List(ctx, venueID)
 }
 
 func (s *Service) Reply(ctx context.Context, ownerID, venueID, reviewID, reply string) (Review, error) {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+	if err := s.authorizer.Require(ctx, ownerID, venueID, access.ManageVenue); err != nil {
 		return Review{}, err
 	}
 	reply = strings.TrimSpace(reply)

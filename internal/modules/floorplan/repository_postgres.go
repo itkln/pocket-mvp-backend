@@ -31,11 +31,12 @@ func (r *PostgresRepository) Get(ctx context.Context, venueID string) (json.RawM
 	return json.RawMessage(plan), err
 }
 
-func (r *PostgresRepository) Save(ctx context.Context, ownerID, venueID string, plan json.RawMessage) error {
+// Save stores the plan; the service has already checked the floor capability.
+func (r *PostgresRepository) Save(ctx context.Context, venueID string, plan json.RawMessage) error {
 	result, err := r.db.Exec(ctx, `
 		UPDATE venues
-		SET settings = jsonb_set(settings, '{floor_plan}', $3::jsonb, true)
-		WHERE id = $2 AND owner_user_id = $1 AND deleted_at IS NULL`, ownerID, venueID, []byte(plan))
+		SET settings = jsonb_set(settings, '{floor_plan}', $2::jsonb, true)
+		WHERE id = $1 AND deleted_at IS NULL`, venueID, []byte(plan))
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"pocket-mvp-backend/internal/access"
 	"strings"
 
 	"pocket-mvp-backend/internal/appfault"
@@ -9,8 +10,8 @@ import (
 
 const maxReorderItems = 500
 
-func (s *Service) ReorderCategories(ctx context.Context, ownerID, venueID string, ids []string) error {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+func (s *Service) ReorderCategories(ctx context.Context, userID, venueID string, ids []string) error {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageMenu); err != nil {
 		return err
 	}
 	if !validOrder(ids) {
@@ -19,8 +20,8 @@ func (s *Service) ReorderCategories(ctx context.Context, ownerID, venueID string
 	return s.repository.ReorderCategories(ctx, venueID, ids)
 }
 
-func (s *Service) ReorderMenuItems(ctx context.Context, ownerID, venueID, categoryID string, ids []string) error {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+func (s *Service) ReorderMenuItems(ctx context.Context, userID, venueID, categoryID string, ids []string) error {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageMenu); err != nil {
 		return err
 	}
 	if strings.TrimSpace(categoryID) == "" || !validOrder(ids) {

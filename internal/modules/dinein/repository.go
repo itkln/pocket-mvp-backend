@@ -1,6 +1,9 @@
 package dinein
 
-import "context"
+import (
+	"context"
+	"pocket-mvp-backend/internal/access"
+)
 
 type TokenFactory func() (encrypted, hash string, err error)
 type Repository interface {
@@ -12,7 +15,7 @@ type Repository interface {
 	History(context.Context, HistoryQuery) (HistoryPage, error)
 }
 type Authorizer interface {
-	RequireOwner(context.Context, string, string) error
+	Require(context.Context, string, string, access.Capability) error
 }
 type Protector interface {
 	Encrypt(string, string) (string, error)

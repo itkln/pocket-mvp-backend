@@ -3,6 +3,7 @@ package workforce
 import (
 	"context"
 	"net/url"
+	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/security"
 	"strings"
@@ -30,7 +31,7 @@ type invitationRepository interface {
 }
 
 func (s *Service) SendInvitation(ctx context.Context, ownerID, venueID, staffID string) error {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+	if err := s.authorizer.Require(ctx, ownerID, venueID, access.ManageVenue); err != nil {
 		return err
 	}
 	repo, ok := s.repository.(invitationRepository)

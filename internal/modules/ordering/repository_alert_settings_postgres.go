@@ -24,7 +24,7 @@ func (r *PostgresRepository) SaveAlertSettings(ctx context.Context, user, venue 
 	if err != nil {
 		return AlertSettings{}, err
 	}
-	if role != "owner" {
+	if !access.Allows(role, access.ManageVenue) {
 		return AlertSettings{}, appfault.ErrForbidden
 	}
 	if err = v.validate(); err != nil {

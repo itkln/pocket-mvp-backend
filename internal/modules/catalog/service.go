@@ -1,9 +1,12 @@
 package catalog
 
-import "context"
+import (
+	"context"
+	"pocket-mvp-backend/internal/access"
+)
 
 type VenueAuthorizer interface {
-	RequireOwner(context.Context, string, string) error
+	Require(context.Context, string, string, access.Capability) error
 }
 
 type Service struct {

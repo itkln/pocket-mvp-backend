@@ -1,9 +1,12 @@
 package reporting
 
-import "context"
+import (
+	"context"
+	"pocket-mvp-backend/internal/access"
+)
 
 type VenueAuthorizer interface {
-	RequireOwner(context.Context, string, string) error
+	Require(context.Context, string, string, access.Capability) error
 }
 
 type Service struct {
@@ -16,7 +19,7 @@ func NewService(repository Repository, authorizer VenueAuthorizer) *Service {
 }
 
 func (s *Service) Dashboard(ctx context.Context, ownerID, venueID string) (Dashboard, error) {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+	if err := s.authorizer.Require(ctx, ownerID, venueID, access.ManageVenue); err != nil {
 		return Dashboard{}, err
 	}
 	return s.repository.Dashboard(ctx, venueID)

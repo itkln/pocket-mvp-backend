@@ -3,6 +3,7 @@ package workforce
 import (
 	"context"
 	"net/mail"
+	"pocket-mvp-backend/internal/access"
 	"regexp"
 	"strings"
 
@@ -15,7 +16,7 @@ var (
 )
 
 type VenueAuthorizer interface {
-	RequireOwner(context.Context, string, string) error
+	Require(context.Context, string, string, access.Capability) error
 }
 
 type Service struct {
@@ -33,14 +34,14 @@ func NewService(repository Repository, authorizer VenueAuthorizer, options ...In
 }
 
 func (s *Service) List(ctx context.Context, ownerID, venueID string) ([]StaffMember, error) {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+	if err := s.authorizer.Require(ctx, ownerID, venueID, access.ManageVenue); err != nil {
 		return nil, err
 	}
 	return s.repository.List(ctx, venueID)
 }
 
 func (s *Service) Create(ctx context.Context, ownerID, venueID string, input StaffInput) (StaffMember, error) {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+	if err := s.authorizer.Require(ctx, ownerID, venueID, access.ManageVenue); err != nil {
 		return StaffMember{}, err
 	}
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
@@ -60,7 +61,7 @@ func (s *Service) Create(ctx context.Context, ownerID, venueID string, input Sta
 }
 
 func (s *Service) Update(ctx context.Context, ownerID, venueID, staffID string, input StaffInput) (StaffMember, error) {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+	if err := s.authorizer.Require(ctx, ownerID, venueID, access.ManageVenue); err != nil {
 		return StaffMember{}, err
 	}
 	if !validRole(input.Role) {
@@ -76,7 +77,7 @@ func (s *Service) Update(ctx context.Context, ownerID, venueID, staffID string, 
 }
 
 func (s *Service) Delete(ctx context.Context, ownerID, venueID, staffID string) error {
-	if err := s.authorizer.RequireOwner(ctx, ownerID, venueID); err != nil {
+	if err := s.authorizer.Require(ctx, ownerID, venueID, access.ManageVenue); err != nil {
 		return err
 	}
 	return s.repository.Delete(ctx, venueID, staffID)

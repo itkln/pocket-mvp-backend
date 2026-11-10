@@ -4,6 +4,7 @@ import (
 	"context"
 	"regexp"
 
+	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
 )
 
@@ -39,7 +40,7 @@ func (s *Service) GetAlertSettings(ctx context.Context, user, venue string) (Ale
 		return AlertSettings{}, err
 	}
 	v, err := s.repository.GetAlertSettings(ctx, venue)
-	v.CanEdit = role == "owner"
+	v.CanEdit = access.Allows(role, access.ManageVenue)
 	return v, err
 }
 func (s *Service) SaveAlertSettings(ctx context.Context, user, venue string, v AlertSettings) (AlertSettings, error) {
@@ -50,7 +51,7 @@ func (s *Service) SaveAlertSettings(ctx context.Context, user, venue string, v A
 	if err != nil {
 		return AlertSettings{}, err
 	}
-	if role != "owner" {
+	if !access.Allows(role, access.ManageVenue) {
 		return AlertSettings{}, appfault.ErrForbidden
 	}
 	if err = v.validate(); err != nil {
