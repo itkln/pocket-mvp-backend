@@ -23,7 +23,7 @@ The rules are checked by `internal/architecture/modules_test.go`:
 
 - domain modules cannot import one another;
 - PostgreSQL imports inside a domain are limited to
-  `repository_postgres.go`.
+  `repository_*_postgres.go`; services cannot import the shared `orderstore` adapter either.
 
 ## Package responsibilities
 
@@ -79,6 +79,8 @@ changing the service.
 | `catalog` | Menu categories, items, prices, availability, images |
 | `workforce` | Invitations, venue roles, staff lifecycle |
 | `ordering` | Orders and order status transitions |
+| `dinein` | Table QR capability, guest orders and venue-scoped receipt history |
+| `reservations` | Availability holds, booking confirmation, preorders and customer cancellation |
 | `feedback` | Reviews and venue replies |
 | `billing` | Payments and workspace subscriptions |
 | `floorplan` | Editable venue layout document |
@@ -126,11 +128,35 @@ The MVP still has a few deliberate same-database integrations:
 - venue onboarding promotes the account to `venue_owner`;
 - billing reads the owner's active venue count before changing a plan;
 - floor plans are stored in the venue settings document;
+- `dinein` is the explicit table-order integration adapter: it normalizes a saved
+  floor-plan table when issuing an owner QR and atomically validates its capability,
+  snapshots menu items, and appends an order to the open bill. The public service
+  only exposes the table context and the requesting guest's receipt. It imports no
+  other business module. See `docs/table-qr-ordering.md`;
 - reporting and access build cross-domain read projections.
 
 These dependencies are behind repository or policy ports. During extraction,
 replace the first three with events, a dedicated projection, or a remote adapter
 without changing the calling service.
+
+### Shared order persistence
+
+`internal/orderstore` implements narrow, transaction-scoped PostgreSQL operations
+used by dine-in orders and reservation preorders: locked menu reads, immutable
+item snapshots and pending tips. It imports no domain modules and never commits
+or opens a transaction. Channel-specific policy stays in the calling module.
+`internal/database` contains connection/migration infrastructure only.
+
+The dine-in adapter separates QR normalization, order creation, receipt reading
+and history into feature files. Reservation creation and hold confirmation share
+one preorder pricing/writing path. Vendor status changes separate lock/check,
+status update and cancellation accounting. Shared receipt projections have a
+single scanner to keep field ordering consistent.
+
+Business rules, lock order, idempotency compatibility and current payment
+limitations are documented in [order-business-rules.md](order-business-rules.md).
+Measured query improvements and validation are in
+[backend-refactoring-results.md](backend-refactoring-results.md).
 
 ## Extraction path
 

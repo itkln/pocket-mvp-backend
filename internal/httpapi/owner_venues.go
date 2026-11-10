@@ -77,3 +77,16 @@ func (api *API) getOwnerDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"dashboard": result})
 }
+
+func (api *API) listStaffVenues(w http.ResponseWriter, r *http.Request) {
+	user, ok := api.currentUser(w, r)
+	if !ok {
+		return
+	}
+	items, err := api.venues.ListWorkplaces(r.Context(), user.ID)
+	if err != nil {
+		api.writeOwnerError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"venues": items})
+}

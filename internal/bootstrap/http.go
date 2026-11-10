@@ -13,6 +13,7 @@ import (
 	"pocket-mvp-backend/internal/modules/availability"
 	"pocket-mvp-backend/internal/modules/billing"
 	"pocket-mvp-backend/internal/modules/catalog"
+	"pocket-mvp-backend/internal/modules/dinein"
 	"pocket-mvp-backend/internal/modules/favorites"
 	"pocket-mvp-backend/internal/modules/feedback"
 	"pocket-mvp-backend/internal/modules/floorplan"
@@ -61,6 +62,7 @@ func NewHTTPHandler(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) (h
 	availabilityService := availability.NewService(availabilityRepository)
 
 	return httpapi.New(httpapi.Dependencies{
+		DishBaseURL:    cfg.SpotsAppBaseURL,
 		Database:       db,
 		Logger:         logger,
 		AllowedOrigins: cfg.AllowedOrigins,
@@ -71,8 +73,9 @@ func NewHTTPHandler(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) (h
 		Reservations:   reservations.NewService(reservations.NewPostgresRepository(db), reservationAvailability{availabilityService, availabilityRepository}),
 		Favorites:      favorites.NewService(favorites.NewPostgresRepository(db), venueService),
 		Catalog:        catalog.NewService(catalog.NewPostgresRepository(db), venueAuthorizer),
-		Workforce:      workforce.NewService(workforce.NewPostgresRepository(db), venueAuthorizer),
-		Ordering:       ordering.NewService(ordering.NewPostgresRepository(db), venueAuthorizer),
+		Workforce:      workforce.NewService(workforce.NewPostgresRepository(db), venueAuthorizer, workforce.InvitationOptions{Sender: resetSender, BaseURL: cfg.AppBaseURL, Protector: protector}),
+		Ordering:       ordering.NewService(ordering.NewPostgresRepository(db, protector), venueAuthorizer),
+		DineIn:         dinein.NewService(dinein.NewPostgresRepository(db), venueAuthorizer, protector, cfg.SpotsAppBaseURL),
 		Feedback:       feedback.NewService(feedback.NewPostgresRepository(db), venueAuthorizer),
 		Billing:        billing.NewService(billing.NewPostgresRepository(db), venueAuthorizer),
 		FloorPlan:      floorplan.NewService(floorplan.NewPostgresRepository(db), venueAuthorizer),

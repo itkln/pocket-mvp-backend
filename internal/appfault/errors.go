@@ -7,6 +7,7 @@ import (
 )
 
 var (
+	ErrForbidden    = errors.New("forbidden")
 	ErrInvalidInput = errors.New("invalid input")
 	ErrNotFound     = errors.New("not found")
 	ErrConflict     = errors.New("conflict")

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/gratuity"
 )
 
 const holdTTL = 10 * time.Minute
@@ -148,35 +149,19 @@ func (r *PostgresRepository) Confirm(ctx context.Context, venueID, holdID string
 	if len(input.Items) > 0 && !preorderEnabled {
 		return Result{}, ErrItemUnavailable
 	}
-	type snapshot struct {
-		ID, Name        string
-		Price, Quantity int
+	snapshots, subtotal, err := pricePreorder(ctx, tx, venueID, result.Currency, input)
+	if err != nil {
+		return Result{}, err
 	}
-	snapshots := make([]snapshot, 0, len(input.Items))
-	for _, item := range input.Items {
-		var name, currency string
-		var price int
-		err = tx.QueryRow(ctx, `SELECT i.name, i.price_minor, i.currency FROM menu_items i
-			JOIN menu_categories c ON c.id = i.category_id AND c.venue_id = i.venue_id
-			WHERE i.id = $1 AND i.venue_id = $2 AND i.is_available AND i.deleted_at IS NULL AND c.is_active AND c.preorder_enabled
-			FOR SHARE OF i, c`, item.MenuItemID, venueID).Scan(&name, &price, &currency)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Result{}, ErrItemUnavailable
-		}
-		if err != nil {
-			return Result{}, err
-		}
-		if currency != result.Currency {
-			return Result{}, appfault.ErrInvalidInput
-		}
-		if price != item.ExpectedPriceMinor {
-			return Result{}, ErrPriceChanged
-		}
-		if price > 100000000 || result.PreorderTotalMinor > 100000000-price*item.Quantity {
-			return Result{}, appfault.ErrInvalidInput
-		}
-		result.PreorderTotalMinor += price * item.Quantity
-		snapshots = append(snapshots, snapshot{item.MenuItemID, name, price, item.Quantity})
+	result.PreorderTotalMinor = subtotal
+	result.PreorderSubtotalMinor = result.PreorderTotalMinor
+	result.PreorderTipMinor, err = gratuity.Calculate(result.PreorderSubtotalMinor, input.Tip)
+	if err != nil {
+		return Result{}, err
+	}
+	result.PreorderTotalMinor += result.PreorderTipMinor
+	if input.ExpectedTotalMinor != nil && *input.ExpectedTotalMinor != result.PreorderTotalMinor {
+		return Result{}, ErrPriceChanged
 	}
 	if _, err = tx.Exec(ctx, `UPDATE reservations SET status = 'confirmed', hold_expires_at = NULL,
 		confirmation_hash = $2, guest_name = $3, guest_phone = NULLIF($4, ''),
@@ -185,27 +170,8 @@ func (r *PostgresRepository) Confirm(ctx context.Context, venueID, holdID string
 		return Result{}, appfault.MapWriteError(err)
 	}
 	result.ID = holdID
-	if len(snapshots) > 0 {
-		var orderID string
-		err = tx.QueryRow(ctx, `INSERT INTO orders (venue_id, reservation_id, venue_table_id, customer_user_id, channel, status, guest_name, guest_email,
-			currency, subtotal_minor, total_minor, notes, idempotency_key, placed_at)
-			VALUES ($1, $2, $3, NULLIF($4, '')::uuid, 'preorder', 'new', $5, NULLIF($6, ''), $7, $8, $8, NULLIF($9, ''), $10, now()) RETURNING id::text, order_number`,
-			venueID, holdID, tableID, input.CustomerUserID, input.GuestName, input.GuestEmail, result.Currency,
-			result.PreorderTotalMinor, input.Notes, input.IdempotencyKey).Scan(&orderID, &result.PreorderOrderNumber)
-		if err != nil {
-			return Result{}, appfault.MapWriteError(err)
-		}
-		for _, item := range snapshots {
-			if _, err = tx.Exec(ctx, `INSERT INTO reservation_preorder_items (reservation_id, menu_item_id, item_name, unit_price_minor, quantity)
-				VALUES ($1, $2, $3, $4, $5)`, holdID, item.ID, item.Name, item.Price, item.Quantity); err != nil {
-				return Result{}, err
-			}
-			if _, err = tx.Exec(ctx, `INSERT INTO order_items (order_id, menu_item_id, item_name, unit_price_minor, quantity, total_minor)
-				VALUES ($1, $2, $3, $4, $5, $6)`, orderID, item.ID, item.Name, item.Price, item.Quantity,
-				item.Price*item.Quantity); err != nil {
-				return Result{}, err
-			}
-		}
+	if err = insertPreorder(ctx, tx, venueID, tableID, input, &result, snapshots); err != nil {
+		return Result{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return Result{}, appfault.MapWriteError(err)

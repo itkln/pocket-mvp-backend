@@ -2,6 +2,7 @@ package workforce
 
 import (
 	"context"
+	"net/mail"
 	"regexp"
 	"strings"
 
@@ -20,10 +21,15 @@ type VenueAuthorizer interface {
 type Service struct {
 	repository Repository
 	authorizer VenueAuthorizer
+	invites    InvitationOptions
 }
 
-func NewService(repository Repository, authorizer VenueAuthorizer) *Service {
-	return &Service{repository: repository, authorizer: authorizer}
+func NewService(repository Repository, authorizer VenueAuthorizer, options ...InvitationOptions) *Service {
+	s := &Service{repository: repository, authorizer: authorizer}
+	if len(options) > 0 {
+		s.invites = options[0]
+	}
+	return s
 }
 
 func (s *Service) List(ctx context.Context, ownerID, venueID string) ([]StaffMember, error) {
@@ -39,10 +45,18 @@ func (s *Service) Create(ctx context.Context, ownerID, venueID string, input Sta
 	}
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
 	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
-	if input.DisplayName == "" || !strings.Contains(input.Email, "@") || !validRole(input.Role) {
+	address, emailErr := mail.ParseAddress(input.Email)
+	if input.DisplayName == "" || emailErr != nil || address.Address != input.Email || strings.ContainsAny(input.Email, "\r\n") || !validRole(input.Role) {
 		return StaffMember{}, appfault.ErrInvalidInput
 	}
-	return s.repository.Create(ctx, ownerID, venueID, input)
+	member, err := s.repository.Create(ctx, ownerID, venueID, input)
+	if err == nil && s.invites.Sender != nil {
+		member.InviteDelivery = "sent"
+		if sendErr := s.SendInvitation(ctx, ownerID, venueID, member.ID); sendErr != nil {
+			member.InviteDelivery = "failed"
+		}
+	}
+	return member, err
 }
 
 func (s *Service) Update(ctx context.Context, ownerID, venueID, staffID string, input StaffInput) (StaffMember, error) {

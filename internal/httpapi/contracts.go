@@ -12,6 +12,7 @@ import (
 	"pocket-mvp-backend/internal/modules/availability"
 	"pocket-mvp-backend/internal/modules/billing"
 	"pocket-mvp-backend/internal/modules/catalog"
+	"pocket-mvp-backend/internal/modules/dinein"
 	"pocket-mvp-backend/internal/modules/feedback"
 	"pocket-mvp-backend/internal/modules/identity"
 	"pocket-mvp-backend/internal/modules/ordering"
@@ -37,6 +38,7 @@ type IdentityService interface {
 
 type VenueService interface {
 	List(context.Context, string) ([]venues.Venue, error)
+	ListWorkplaces(context.Context, string) ([]venues.Venue, error)
 	SearchPublished(context.Context, venues.PublicVenueQuery) (venues.PublicVenuePage, error)
 	GetPublished(context.Context, string) (venues.PublicVenue, error)
 	ListPublishedMenu(context.Context, string) ([]venues.PublicMenuCategory, error)
@@ -52,6 +54,7 @@ type AvailabilityService interface {
 
 type ReservationService interface {
 	ListCustomer(context.Context, string) ([]reservations.CustomerReservation, error)
+	CancelCustomer(context.Context, string, string) (reservations.CustomerReservation, error)
 	Create(context.Context, string, reservations.CreateInput) (reservations.Result, error)
 	Hold(context.Context, string, reservations.CreateInput) (reservations.HoldResult, error)
 	Confirm(context.Context, string, string, reservations.CreateInput) (reservations.Result, error)
@@ -78,6 +81,8 @@ type CatalogService interface {
 }
 
 type WorkforceService interface {
+	SendInvitation(context.Context, string, string, string) error
+	Invitation(context.Context, string, string, string, bool) (workforce.Invitation, error)
 	List(context.Context, string, string) ([]workforce.StaffMember, error)
 	Create(context.Context, string, string, workforce.StaffInput) (workforce.StaffMember, error)
 	Update(context.Context, string, string, string, workforce.StaffInput) (workforce.StaffMember, error)
@@ -85,9 +90,22 @@ type WorkforceService interface {
 }
 
 type OrderingService interface {
+	GetAlertSettings(context.Context, string, string) (ordering.AlertSettings, error)
+	SaveAlertSettings(context.Context, string, string, ordering.AlertSettings) (ordering.AlertSettings, error)
+	ListPage(context.Context, string, string, ordering.Query) (ordering.Page, error)
+	Get(context.Context, string, string, string) (ordering.Order, error)
 	List(context.Context, string, string) ([]ordering.Order, error)
 	ListCustomerPreorders(context.Context, string) ([]ordering.Order, error)
-	UpdateStatus(context.Context, string, string, string, string) (ordering.Order, error)
+	UpdateStatus(context.Context, string, string, string, string, string, ...ordering.StatusChange) (ordering.Order, error)
+}
+
+type DineInService interface {
+	CurrentBill(context.Context, string) (*dinein.Bill, error)
+	OwnerQRCode(context.Context, string, string, string, bool) (dinein.QRCode, error)
+	Resolve(context.Context, string) (dinein.Table, error)
+	Create(context.Context, dinein.CreateInput) (dinein.Order, error)
+	Lookup(context.Context, string, string, ...dinein.HistoryInput) (dinein.Order, error)
+	History(context.Context, dinein.HistoryInput) (dinein.HistoryPage, error)
 }
 
 type FeedbackService interface {
@@ -111,6 +129,7 @@ type ReportingService interface {
 }
 
 type Dependencies struct {
+	DishBaseURL    string
 	Database       *pgxpool.Pool
 	Logger         *slog.Logger
 	AllowedOrigins []string
@@ -123,6 +142,7 @@ type Dependencies struct {
 	Catalog        CatalogService
 	Workforce      WorkforceService
 	Ordering       OrderingService
+	DineIn         DineInService
 	Feedback       FeedbackService
 	Billing        BillingService
 	FloorPlan      FloorPlanService
@@ -132,6 +152,7 @@ type Dependencies struct {
 }
 
 type API struct {
+	dishBaseURL    string
 	database       *pgxpool.Pool
 	logger         *slog.Logger
 	allowedOrigins []string
@@ -145,6 +166,7 @@ type API struct {
 	catalog        CatalogService
 	workforce      WorkforceService
 	ordering       OrderingService
+	dineIn         DineInService
 	feedback       FeedbackService
 	billing        BillingService
 	floorPlan      FloorPlanService

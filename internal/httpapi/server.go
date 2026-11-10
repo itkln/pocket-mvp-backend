@@ -11,6 +11,7 @@ import (
 
 func New(deps Dependencies) http.Handler {
 	api := &API{
+		dishBaseURL:    deps.DishBaseURL,
 		database:       deps.Database,
 		logger:         deps.Logger,
 		allowedOrigins: deps.AllowedOrigins,
@@ -24,6 +25,7 @@ func New(deps Dependencies) http.Handler {
 		catalog:        deps.Catalog,
 		workforce:      deps.Workforce,
 		ordering:       deps.Ordering,
+		dineIn:         deps.DineIn,
 		feedback:       deps.Feedback,
 		billing:        deps.Billing,
 		floorPlan:      deps.FloorPlan,

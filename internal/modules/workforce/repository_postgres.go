@@ -55,8 +55,11 @@ func (r *PostgresRepository) Update(ctx context.Context, venueID, staffID string
 	var member StaffMember
 	err := r.db.QueryRow(ctx, `
 		UPDATE venue_staff
-		SET role = $3, status = $4
-		WHERE id = $2 AND venue_id = $1 AND status <> 'removed'
+		SET role = $3, status = $4,
+ invite_token_hash=CASE WHEN $4='invited' THEN invite_token_hash ELSE NULL END,
+ invite_expires_at=CASE WHEN $4='invited' THEN invite_expires_at ELSE NULL END
+		WHERE id = $2 AND venue_id = $1 AND status <> 'removed' AND removed_at IS NULL
+ AND (($4='invited' AND user_id IS NULL) OR ($4='active' AND user_id IS NOT NULL) OR $4='inactive')
 		RETURNING id::text, COALESCE(display_name, ''), invited_email, role, status, invited_at, accepted_at`,
 		venueID, staffID, input.Role, input.Status,
 	).Scan(&member.ID, &member.DisplayName, &member.Email, &member.Role, &member.Status, &member.InvitedAt, &member.AcceptedAt)
@@ -69,7 +72,7 @@ func (r *PostgresRepository) Update(ctx context.Context, venueID, staffID string
 func (r *PostgresRepository) Delete(ctx context.Context, venueID, staffID string) error {
 	result, err := r.db.Exec(ctx, `
 		UPDATE venue_staff
-		SET status = 'removed', removed_at = now()
+		SET status = 'removed', removed_at = now(), invite_token_hash=NULL,invite_expires_at=NULL
 		WHERE id = $2 AND venue_id = $1 AND status <> 'removed'`, venueID, staffID)
 	if err != nil {
 		return err

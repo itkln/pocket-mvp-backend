@@ -28,6 +28,8 @@ func decodeOwnerJSON(w http.ResponseWriter, r *http.Request, destination any) bo
 
 func (api *API) writeOwnerError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, appfault.ErrForbidden):
+		writeAPIError(w, http.StatusForbidden, "forbidden", "This role cannot perform this action.")
 	case errors.Is(err, appfault.ErrInvalidInput):
 		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the submitted data.")
 	case errors.Is(err, appfault.ErrNotFound):

@@ -57,6 +57,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
       VENDOR_APP_BASE_URL: ${VENDOR_APP_BASE_URL:-}
+      DISH_APP_BASE_URL: ${DISH_APP_BASE_URL:-${SPOTS_APP_BASE_URL:-}}
       SPOTS_APP_BASE_URL: ${SPOTS_APP_BASE_URL:-}
       # Deprecated migration fallback; remove after every environment uses SPOTS_APP_BASE_URL.
       EATS_APP_BASE_URL: ${EATS_APP_BASE_URL:-}
@@ -121,12 +122,12 @@ services:
     init: true
     restart: unless-stopped
 
-  spots:
-    image: ${SPOTS_IMAGE:-pocket-spots}
+  dish:
+    image: ${DISH_IMAGE:-pocket-dish}
     build:
       context: ../frontend
       args:
-        APP_TARGET: spots
+        APP_TARGET: dish
         NEXT_PUBLIC_API_URL: /api/v1
         INTERNAL_API_URL: http://backend:8080
     environment:
@@ -135,9 +136,9 @@ services:
       HOSTNAME: 0.0.0.0
       NEXT_PUBLIC_API_URL: /api/v1
       INTERNAL_API_URL: http://backend:8080
-      APP_TARGET: spots
+      APP_TARGET: dish
     ports:
-      - "${SPOTS_PORT:-3001}:3000"
+      - "${DISH_PORT:-3001}:3000"
     depends_on:
       backend:
         condition: service_healthy

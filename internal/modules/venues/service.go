@@ -208,7 +208,7 @@ func uniqueSlug(name string) (string, error) {
 	}
 	suffix := slugify(token)
 	if len(suffix) > 7 {
-		suffix = suffix[:7]
+		suffix = strings.TrimRight(suffix[:7], "-")
 	}
 	if suffix == "" {
 		return "", errors.New("failed to generate venue slug")
@@ -220,4 +220,8 @@ func slugify(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	value = regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(value, "-")
 	return strings.Trim(value, "-")
+}
+
+func (s *Service) ListWorkplaces(ctx context.Context, userID string) ([]Venue, error) {
+	return s.repository.ListWorkplaces(ctx, userID)
 }

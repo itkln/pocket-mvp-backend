@@ -16,7 +16,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, input PasswordResetR
 	baseURL := s.resetBaseURL
 	switch input.Product {
 	case "", "vendor": // Keep pre-split clients compatible with Vendor.
-	case "spots", "eats": // "eats" is a temporary compatibility alias.
+	case "dish", "spots", "eats": // "eats" is a temporary compatibility alias.
 		baseURL = s.resetSpotsBaseURL
 	default:
 		return ErrInvalidInput

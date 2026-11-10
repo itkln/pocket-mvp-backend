@@ -14,6 +14,7 @@ func TestPasswordResetProductConfiguration(t *testing.T) {
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("APP_BASE_URL", "https://legacy-vendor.example")
 	t.Setenv("VENDOR_APP_BASE_URL", "")
+	t.Setenv("DISH_APP_BASE_URL", "")
 	t.Setenv("SPOTS_APP_BASE_URL", "")
 	t.Setenv("EATS_APP_BASE_URL", "")
 	cfg, err := Load()
@@ -44,5 +45,19 @@ func TestPasswordResetProductConfiguration(t *testing.T) {
 	t.Setenv("EATS_APP_BASE_URL", "")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SPOTS_APP_BASE_URL") {
 		t.Fatal("production must explicitly configure the Spots origin")
+	}
+}
+
+func TestDishOriginTakesPrecedence(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://localhost/pocket_test")
+	key := base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
+	t.Setenv("DATA_ENCRYPTION_KEY", key)
+	t.Setenv("DATA_LOOKUP_KEY", key)
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("DISH_APP_BASE_URL", "https://dish.example")
+	t.Setenv("SPOTS_APP_BASE_URL", "https://old-spots.example")
+	cfg, err := Load()
+	if err != nil || cfg.SpotsAppBaseURL != "https://dish.example" {
+		t.Fatalf("Dish URL: %s %v", cfg.SpotsAppBaseURL, err)
 	}
 }

@@ -45,7 +45,7 @@ func TestDomainModulesDoNotImportEachOther(t *testing.T) {
 	}
 }
 
-func TestPostgresImportsStayInRepositoryAdapters(t *testing.T) {
+func TestPersistenceImportsStayInRepositoryAdapters(t *testing.T) {
 	modulesRoot := filepath.Join("..", "modules")
 	err := filepath.WalkDir(modulesRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -64,9 +64,9 @@ func TestPostgresImportsStayInRepositoryAdapters(t *testing.T) {
 				return err
 			}
 			name := filepath.Base(path)
-			if strings.HasPrefix(importPath, "github.com/jackc/pgx") &&
+			if (strings.HasPrefix(importPath, "github.com/jackc/pgx") || importPath == "pocket-mvp-backend/internal/orderstore") &&
 				!(strings.HasPrefix(name, "repository_") && strings.HasSuffix(name, "_postgres.go")) {
-				t.Errorf("%s imports PostgreSQL outside a repository adapter", path)
+				t.Errorf("%s imports persistence outside a repository adapter", path)
 			}
 		}
 		return nil

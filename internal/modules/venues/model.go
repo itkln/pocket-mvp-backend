@@ -3,6 +3,7 @@ package venues
 import "time"
 
 type Venue struct {
+	AccessRole  string         `json:"access_role,omitempty"`
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
 	Slug        string         `json:"slug"`
@@ -50,6 +51,7 @@ type PublicVenue struct {
 	City            string    `json:"city"`
 	CountryCode     string    `json:"country_code"`
 	ImageURL        string    `json:"image_url,omitempty"`
+	LogoURL         string    `json:"logo_url,omitempty"`
 	Rating          float64   `json:"rating"`
 	ReviewCount     int       `json:"review_count"`
 	Tags            []string  `json:"tags"`

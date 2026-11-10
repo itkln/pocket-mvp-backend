@@ -59,7 +59,7 @@ func TestRequestPasswordResetSelectsConfiguredProductOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct{ product, host string }{
-		{"spots", "spots.example"}, {"eats", "spots.example"}, {"vendor", "vendor.example"}, {"", "vendor.example"},
+		{"dish", "spots.example"}, {"spots", "spots.example"}, {"eats", "spots.example"}, {"vendor", "vendor.example"}, {"", "vendor.example"},
 	} {
 		t.Run("product="+tc.product, func(t *testing.T) {
 			repo := &resetRepositorySpy{found: true, created: true}

@@ -110,3 +110,17 @@ func TestListPublishedReviewsExcludesUnpublishedVenueAndNormalizesEmptyList(t *t
 		t.Fatalf("unexpected empty reviews: %#v, %v", reviews, err)
 	}
 }
+
+func TestGeneratedSlugNeverEndsInSeparator(t *testing.T) {
+	for i := 0; i < 200; i++ {
+		slug, err := uniqueSlug("First Bistro")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if slug[len(slug)-1] == '-' {
+			t.Fatalf("invalid generated slug: %s", slug)
+		}
+	}
+}
+
+func (r *repositorySpy) ListWorkplaces(context.Context, string) ([]Venue, error) { return nil, nil }

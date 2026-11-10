@@ -60,7 +60,7 @@ func (r *PostgresRepository) SearchPublished(ctx context.Context, query PublicVe
 			       COUNT(r.id)::int AS review_count
 			FROM venues v
 			LEFT JOIN reviews r ON r.venue_id = v.id AND r.status = 'published'
-			WHERE v.status = 'active' AND v.deleted_at IS NULL
+			WHERE v.status = 'active' AND v.deleted_at IS NULL AND COALESCE(v.settings->>'public_category', 'restaurants') = 'restaurants'
 			  AND ($7::text[] = '{}'::text[] OR v.id::text = ANY($7::text[]))
 			GROUP BY v.id
 		), searchable_catalog AS (
@@ -123,6 +123,7 @@ func (r *PostgresRepository) SearchPublished(ctx context.Context, query PublicVe
 			return nil, 0, fmt.Errorf("decode public venue settings: %w", err)
 		}
 		item.ImageURL = settingString(publicSettings, "cover_image_url")
+		item.LogoURL = settingString(publicSettings, "logo_image_url")
 		item.PreorderEnabled = settingBool(publicSettings, "preorder_enabled")
 		item.Tags = settingStrings(publicSettings, "public_tags")
 		item.Filters = settingStrings(publicSettings, "public_filters")
@@ -157,7 +158,7 @@ func (r *PostgresRepository) ListPublishedMenu(ctx context.Context, venueID stri
 		JOIN menu_items i ON i.category_id = c.id AND i.venue_id = c.venue_id
 		JOIN venues v ON v.id = c.venue_id
 		WHERE c.venue_id = $1 AND c.is_active AND i.is_available AND i.deleted_at IS NULL
-		  AND v.status = 'active' AND v.deleted_at IS NULL
+		  AND v.status = 'active' AND v.deleted_at IS NULL AND COALESCE(v.settings->>'public_category', 'restaurants') = 'restaurants'
 		ORDER BY c.sort_order, c.created_at, c.id, i.sort_order, i.created_at, i.id`, venueID)
 	if err != nil {
 		return nil, err
@@ -188,7 +189,7 @@ func (r *PostgresRepository) ListPublishedReviews(ctx context.Context, venueID s
 		FROM reviews r
 		JOIN venues v ON v.id = r.venue_id
 		WHERE r.venue_id = $1 AND r.status = 'published'
-		  AND v.status = 'active' AND v.deleted_at IS NULL
+		  AND v.status = 'active' AND v.deleted_at IS NULL AND COALESCE(v.settings->>'public_category', 'restaurants') = 'restaurants'
 		ORDER BY r.created_at DESC, r.id DESC
 		LIMIT 50`, venueID)
 	if err != nil {
@@ -219,7 +220,7 @@ func (r *PostgresRepository) GetPublished(ctx context.Context, venueID string) (
 		       COUNT(reviews.id)::int, v.created_at
 		FROM venues v
 		LEFT JOIN reviews ON reviews.venue_id = v.id AND reviews.status = 'published'
-		WHERE v.id = $1 AND v.status = 'active' AND v.deleted_at IS NULL
+		WHERE v.id = $1 AND v.status = 'active' AND v.deleted_at IS NULL AND COALESCE(v.settings->>'public_category', 'restaurants') = 'restaurants'
 		GROUP BY v.id`, venueID)
 	var item PublicVenue
 	var settings []byte
@@ -237,6 +238,7 @@ func (r *PostgresRepository) GetPublished(ctx context.Context, venueID string) (
 		return PublicVenue{}, fmt.Errorf("decode public venue settings: %w", err)
 	}
 	item.ImageURL = settingString(publicSettings, "cover_image_url")
+	item.LogoURL = settingString(publicSettings, "logo_image_url")
 	item.PreorderEnabled = settingBool(publicSettings, "preorder_enabled")
 	item.Tags = settingStrings(publicSettings, "public_tags")
 	item.Filters = settingStrings(publicSettings, "public_filters")
@@ -377,4 +379,28 @@ func settingStrings(settings map[string]any, key string) []string {
 		}
 	}
 	return result
+}
+
+// ListWorkplaces returns operational venue context, without private settings or owner contacts.
+func (r *PostgresRepository) ListWorkplaces(ctx context.Context, userID string) ([]Venue, error) {
+	rows, err := r.db.Query(ctx, `
+ SELECT v.id::text,v.name,v.slug,v.address_line1,v.city,v.country_code,v.timezone,v.currency,v.status,
+ CASE WHEN v.owner_user_id=$1 THEN 'owner' ELSE s.role END
+ FROM venues v LEFT JOIN venue_staff s ON s.venue_id=v.id AND s.user_id=$1 AND s.status='active' AND s.removed_at IS NULL
+ WHERE v.deleted_at IS NULL AND (v.owner_user_id=$1 OR s.id IS NOT NULL)
+ ORDER BY v.created_at,v.id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []Venue{}
+	for rows.Next() {
+		var v Venue
+		if err := rows.Scan(&v.ID, &v.Name, &v.Slug, &v.Address, &v.City, &v.CountryCode, &v.Timezone, &v.Currency, &v.Status, &v.AccessRole); err != nil {
+			return nil, err
+		}
+		v.Settings = map[string]any{}
+		result = append(result, v)
+	}
+	return result, rows.Err()
 }

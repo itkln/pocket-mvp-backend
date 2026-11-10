@@ -60,8 +60,9 @@ func (s *venueRouteSpy) SearchPublished(_ context.Context, query venues.PublicVe
 	s.query = query
 	return venues.PublicVenuePage{Venues: []venues.PublicVenue{}, Page: query.Page, PageSize: query.PageSize}, nil
 }
-func (s *venueRouteSpy) GetPublished(context.Context, string) (venues.PublicVenue, error) {
-	return venues.PublicVenue{}, nil
+func (s *venueRouteSpy) GetPublished(_ context.Context, venueID string) (venues.PublicVenue, error) {
+	s.venueID = venueID
+	return venues.PublicVenue{ID: venueID, Name: "Public Bistro"}, nil
 }
 func (s *venueRouteSpy) ListPublishedMenu(_ context.Context, venueID string) ([]venues.PublicMenuCategory, error) {
 	s.venueID = venueID
@@ -105,6 +106,25 @@ func TestPublicVenueMenuIsAvailableWithoutAuthentication(t *testing.T) {
 	}
 	if response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("public menu must not be cached: %q", response.Header().Get("Cache-Control"))
+	}
+}
+
+func TestPublicVenueDetailsIsAvailableWithoutAValidSession(t *testing.T) {
+	for _, cookie := range []string{"", "expired-session"} {
+		venueService := &venueRouteSpy{}
+		handler := New(Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Venues: venueService})
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/public/venues/venue-42", nil)
+		if cookie != "" {
+			request.AddCookie(&http.Cookie{Name: "pocket_session", Value: cookie})
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusOK || venueService.venueID != "venue-42" || !strings.Contains(response.Body.String(), "Public Bistro") {
+			t.Fatalf("public details: status=%d venue=%q body=%s", response.Code, venueService.venueID, response.Body.String())
+		}
+		if strings.Contains(response.Body.String(), "owner_id") {
+			t.Fatalf("public details exposed owner identity: %s", response.Body.String())
+		}
 	}
 }
 
@@ -182,4 +202,8 @@ func TestChiRoutePassesVenuePathParameter(t *testing.T) {
 	if venueService.ownerID != "user-1" || venueService.venueID != "venue-42" {
 		t.Fatalf("unexpected route parameters: owner=%q venue=%q", venueService.ownerID, venueService.venueID)
 	}
+}
+
+func (s *venueRouteSpy) ListWorkplaces(context.Context, string) ([]venues.Venue, error) {
+	return nil, nil
 }

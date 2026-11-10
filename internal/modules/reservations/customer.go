@@ -29,10 +29,20 @@ type CustomerReservation struct {
 	GuestPhone          string             `json:"guest_phone,omitempty"`
 	GuestEmail          string             `json:"guest_email,omitempty"`
 	Notes               string             `json:"notes,omitempty"`
+	PreorderTipMinor    int                `json:"preorder_tip_minor"`
 	PreorderTotalMinor  int                `json:"preorder_total_minor"`
 	PreorderOrderNumber int64              `json:"preorder_order_number,omitempty"`
 	Currency            string             `json:"currency"`
 	PreorderItems       []PreorderSnapshot `json:"preorder_items"`
+	PreorderStatus      string             `json:"preorder_status,omitempty"`
+	Cancellation        Cancellation       `json:"cancellation"`
+}
+
+func (s *Service) CancelCustomer(ctx context.Context, customerID, reservationID string) (CustomerReservation, error) {
+	if !uuidPattern.MatchString(customerID) || !uuidPattern.MatchString(reservationID) {
+		return CustomerReservation{}, appfault.ErrInvalidInput
+	}
+	return s.repository.CancelCustomer(ctx, customerID, reservationID)
 }
 
 func (s *Service) ListCustomer(ctx context.Context, customerID string) ([]CustomerReservation, error) {

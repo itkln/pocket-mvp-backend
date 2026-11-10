@@ -77,13 +77,16 @@ func Load() (Config, error) {
 	if environment != "development" && smtpAddress == "" {
 		return Config{}, errors.New("SMTP_ADDRESS is required outside development")
 	}
-	spotsAppBaseURL := strings.TrimSpace(os.Getenv("SPOTS_APP_BASE_URL"))
+	spotsAppBaseURL := strings.TrimSpace(os.Getenv("DISH_APP_BASE_URL"))
+	if spotsAppBaseURL == "" {
+		spotsAppBaseURL = strings.TrimSpace(os.Getenv("SPOTS_APP_BASE_URL"))
+	}
 	if spotsAppBaseURL == "" {
 		spotsAppBaseURL = strings.TrimSpace(os.Getenv("EATS_APP_BASE_URL"))
 	}
 	if spotsAppBaseURL == "" {
 		if environment != "development" {
-			return Config{}, errors.New("SPOTS_APP_BASE_URL is required outside development")
+			return Config{}, errors.New("DISH_APP_BASE_URL is required outside development (SPOTS_APP_BASE_URL is a compatibility fallback)")
 		}
 		spotsAppBaseURL = "http://localhost:3001"
 	}

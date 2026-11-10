@@ -27,6 +27,7 @@ type Table struct {
 type Interval struct{ Start, End time.Time }
 
 type Venue struct {
+	DurationMinutes int
 	Timezone        string
 	ScheduleEnabled bool
 	SameDayBooking  bool
@@ -70,6 +71,10 @@ func (s *Service) Get(ctx context.Context, venueID, date string, guests int) (Re
 	if err != nil {
 		return Result{}, err
 	}
+	bookingDuration := duration
+	if venue.DurationMinutes > 0 {
+		bookingDuration = time.Duration(venue.DurationMinutes) * time.Minute
+	}
 	location, err := time.LoadLocation(venue.Timezone)
 	if err != nil {
 		return Result{}, err
@@ -86,7 +91,7 @@ func (s *Service) Get(ctx context.Context, venueID, date string, guests int) (Re
 	if selected.Before(today) || selected.After(today.AddDate(0, 0, bookingDays)) {
 		return Result{}, appfault.ErrInvalidInput
 	}
-	result := Result{VenueID: venueID, Date: date, Timezone: venue.Timezone, Guests: guests, DurationMinutes: int(duration.Minutes()), Slots: []Slot{}}
+	result := Result{VenueID: venueID, Date: date, Timezone: venue.Timezone, Guests: guests, DurationMinutes: int(bookingDuration.Minutes()), Slots: []Slot{}}
 	if !venue.ScheduleEnabled || (selected.Equal(today) && !venue.SameDayBooking) {
 		return result, nil
 	}
@@ -97,8 +102,8 @@ func (s *Service) Get(ctx context.Context, venueID, date string, guests int) (Re
 	if err != nil {
 		return Result{}, err
 	}
-	for start := open; !start.Add(duration).After(close); start = start.Add(slotStep) {
-		end := start.Add(duration)
+	for start := open; !start.Add(bookingDuration).After(close); start = start.Add(slotStep) {
+		end := start.Add(bookingDuration)
 		if !start.After(now) {
 			continue
 		}
@@ -109,7 +114,7 @@ func (s *Service) Get(ctx context.Context, venueID, date string, guests int) (Re
 		slot := Slot{Time: start.In(location).Format("15:04"), StartsAt: start, EndsAt: end, Tables: []Table{}}
 		for _, table := range tables {
 			if table.Seats < guests || table.Status == "disabled" ||
-				(selected.Equal(today) && start.Before(now.Add(duration)) && table.Status != "available") {
+				(selected.Equal(today) && start.Before(now.Add(bookingDuration)) && table.Status != "available") {
 				continue
 			}
 			busy := false

@@ -8,67 +8,16 @@ import (
 	"errors"
 	"regexp"
 	"strings"
-	"time"
+	"unicode/utf8"
 
 	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/gratuity"
 )
 
 var ErrPriceChanged = errors.New("preorder price changed")
 var ErrItemUnavailable = errors.New("preorder item unavailable")
 var ErrHoldExpired = errors.New("reservation hold expired")
 var uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-
-type PreorderItem struct {
-	MenuItemID         string `json:"menu_item_id"`
-	Quantity           int    `json:"quantity"`
-	ExpectedPriceMinor int    `json:"expected_price_minor"`
-}
-
-type CreateInput struct {
-	StartsAt       time.Time      `json:"starts_at"`
-	Guests         int            `json:"guests"`
-	CustomerUserID string         `json:"-"`
-	GuestName      string         `json:"guest_name"`
-	GuestPhone     string         `json:"guest_phone"`
-	GuestEmail     string         `json:"guest_email"`
-	Notes          string         `json:"notes"`
-	Items          []PreorderItem `json:"items"`
-	IdempotencyKey string         `json:"idempotency_key"`
-}
-
-type Result struct {
-	ID                  string    `json:"id"`
-	Code                string    `json:"code"`
-	StartsAt            time.Time `json:"starts_at"`
-	GuestCount          int       `json:"guest_count"`
-	PreorderTotalMinor  int       `json:"preorder_total_minor"`
-	PreorderOrderNumber int64     `json:"preorder_order_number,omitempty"`
-	Currency            string    `json:"currency"`
-}
-
-type HoldResult struct {
-	ID        string    `json:"id"`
-	ExpiresAt time.Time `json:"expires_at"`
-}
-
-type Slot struct {
-	TableID  string
-	StartsAt time.Time
-	EndsAt   time.Time
-}
-
-type Availability interface {
-	FindSlot(context.Context, string, time.Time, int) (Slot, error)
-}
-
-type Repository interface {
-	ListCustomer(context.Context, string) ([]CustomerReservation, error)
-	FindByKey(context.Context, string, string) (Result, string, bool, error)
-	Create(context.Context, string, CreateInput, string, Slot) (Result, error)
-	Hold(context.Context, string, CreateInput, string, Slot) (HoldResult, error)
-	Confirm(context.Context, string, string, CreateInput, string, string) (Result, error)
-	GetConfirmed(context.Context, string, string, string) (Result, error)
-}
 
 type Service struct {
 	repository   Repository
@@ -80,12 +29,22 @@ func NewService(repository Repository, availability Availability) *Service {
 }
 
 func normalizeAndValidate(venueID string, input CreateInput) (CreateInput, error) {
+	if err := gratuity.Validate(input.Tip); err != nil {
+		return CreateInput{}, err
+	}
+	// Tips are offered only when ordering at a table, never with a reservation.
+	if input.Tip != nil && (input.Tip.Percent > 0 || input.Tip.AmountMinor > 0) {
+		return CreateInput{}, appfault.ErrInvalidInput
+	}
+	if input.ExpectedTotalMinor != nil && (*input.ExpectedTotalMinor < 0 || *input.ExpectedTotalMinor > gratuity.MaxTotal) {
+		return CreateInput{}, appfault.ErrInvalidInput
+	}
 	input.GuestName = strings.TrimSpace(input.GuestName)
 	input.GuestPhone = strings.TrimSpace(input.GuestPhone)
 	input.GuestEmail = strings.TrimSpace(input.GuestEmail)
 	input.Notes = strings.TrimSpace(input.Notes)
 	if !uuidPattern.MatchString(venueID) || input.StartsAt.IsZero() || input.Guests < 1 || input.Guests > 20 || len(input.GuestName) < 2 || len(input.GuestName) > 120 ||
-		(input.GuestPhone == "" && input.GuestEmail == "") || (input.GuestPhone != "" && len(input.GuestPhone) < 5) || len(input.GuestPhone) > 40 || len(input.GuestEmail) > 254 || len(input.Notes) > 500 ||
+		(input.GuestPhone == "" && input.GuestEmail == "") || (input.GuestPhone != "" && len(input.GuestPhone) < 5) || len(input.GuestPhone) > 40 || len(input.GuestEmail) > 254 || utf8.RuneCountInString(input.Notes) > 500 ||
 		(input.CustomerUserID != "" && !uuidPattern.MatchString(input.CustomerUserID)) ||
 		len(input.Items) > 30 || len(input.IdempotencyKey) < 16 || len(input.IdempotencyKey) > 128 {
 		return CreateInput{}, appfault.ErrInvalidInput

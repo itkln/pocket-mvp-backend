@@ -4,17 +4,17 @@ import "context"
 
 func (r *PostgresRepository) ListCustomerPreorders(ctx context.Context, customerID string) ([]Order, error) {
 	rows, err := r.db.Query(ctx, `WITH recent AS (
-		SELECT id, order_number, venue_id, reservation_id, guest_name, total_minor, currency, status, created_at
+		SELECT id, order_number, venue_id, reservation_id, guest_name, total_minor, tip_minor, currency, status, created_at
 		FROM orders
 		WHERE customer_user_id = $1 AND channel = 'preorder' AND reservation_id IS NOT NULL
 		ORDER BY created_at DESC
 		LIMIT 100
 	)
-	SELECT o.id::text, o.order_number, v.name, COALESCE(o.guest_name, ''), o.total_minor,
+	SELECT o.id::text, o.order_number, v.name, COALESCE(o.guest_name, ''), o.total_minor, o.tip_minor,
 		o.currency, o.status, o.created_at, r.reservation_code, r.starts_at,
-		COALESCE(oi.item_name, ''), COALESCE(oi.quantity, 0), COALESCE(oi.unit_price_minor, 0)
+		COALESCE(oi.item_name, ''), COALESCE(oi.quantity, 0), COALESCE(oi.unit_price_minor, 0), COALESCE(oi.total_minor, 0)
 	FROM recent o
-	JOIN reservations r ON r.id = o.reservation_id AND r.status = 'confirmed'
+	JOIN reservations r ON r.id = o.reservation_id AND r.status <> 'pending' AND r.hold_expires_at IS NULL
 	JOIN venues v ON v.id = o.venue_id
 	LEFT JOIN order_items oi ON oi.order_id = o.id
 	ORDER BY o.created_at DESC, oi.created_at, oi.id`, customerID)
@@ -29,9 +29,9 @@ func (r *PostgresRepository) ListCustomerPreorders(ctx context.Context, customer
 		var order Order
 		var item OrderItem
 		if err := rows.Scan(&order.ID, &order.Number, &order.VenueName, &order.GuestName,
-			&order.TotalMinor, &order.Currency, &order.Status, &order.CreatedAt,
+			&order.TotalMinor, &order.TipMinor, &order.Currency, &order.Status, &order.CreatedAt,
 			&order.ReservationCode, &order.ReservationStartsAt,
-			&item.Name, &item.Quantity, &item.UnitPriceMinor); err != nil {
+			&item.Name, &item.Quantity, &item.UnitPriceMinor, &item.TotalMinor); err != nil {
 			return nil, err
 		}
 		if index, found := byID[order.ID]; found {

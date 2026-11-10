@@ -24,9 +24,11 @@ func (*reservationIdentity) Authenticate(context.Context, string) (identity.User
 }
 
 type reservationRouteSpy struct {
-	input      reservations.CreateInput
-	confirmErr error
-	customerID string
+	input         reservations.CreateInput
+	confirmErr    error
+	customerID    string
+	reservationID string
+	cancelErr     error
 }
 
 func (s *reservationRouteSpy) Create(_ context.Context, _ string, input reservations.CreateInput) (reservations.Result, error) {
@@ -53,6 +55,11 @@ func (s *reservationRouteSpy) GetConfirmed(context.Context, string, string, stri
 func (s *reservationRouteSpy) ListCustomer(_ context.Context, customerID string) ([]reservations.CustomerReservation, error) {
 	s.customerID = customerID
 	return []reservations.CustomerReservation{{ID: "booking-1", Code: "BOOK123"}}, nil
+}
+
+func (s *reservationRouteSpy) CancelCustomer(_ context.Context, customerID, reservationID string) (reservations.CustomerReservation, error) {
+	s.customerID, s.reservationID = customerID, reservationID
+	return reservations.CustomerReservation{ID: reservationID, Status: "cancelled"}, s.cancelErr
 }
 
 func TestCustomerReservationsRequiresSessionAndUsesAccountOwnership(t *testing.T) {
