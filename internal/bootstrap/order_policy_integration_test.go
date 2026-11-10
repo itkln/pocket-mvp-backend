@@ -118,7 +118,7 @@ func TestOrderPolicyIntegration(t *testing.T) {
 		orderID := create()
 		call := func(role, method, body string) *httptest.ResponseRecorder {
 			handler := httpapi.New(httpapi.Dependencies{Ordering: svc, Identity: venueHistoryIdentity{userID: actors[role]}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), SessionCookie: "session"})
-			path := "/api/v1/owner/venues/" + venue + "/orders"
+			path := "/api/v1/venues/" + venue + "/orders"
 			if method == "PATCH" {
 				path += "/" + orderID
 			}

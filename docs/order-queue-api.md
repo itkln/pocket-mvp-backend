@@ -1,10 +1,10 @@
 # Vendor order queue API (V-ORD-02)
 
 All routes require an authenticated account session. Membership is resolved on the
-server for the venue in the URL. Both prefixes use the same ordering service:
+server for the venue in the URL. The owner and the staff share one route; the venue role
+decides what the account may do (V-BE-03):
 
-- `/api/v1/owner/venues/{venueID}/orders`
-- `/api/v1/staff/venues/{venueID}/orders`
+- `/api/v1/venues/{venueID}/orders` (below: `{prefix}`)
 
 ## List
 

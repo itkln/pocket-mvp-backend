@@ -115,15 +115,6 @@ func TestRegisterDoesNotAcceptAccountRole(t *testing.T) {
 	}
 }
 
-func TestOwnerAPIRequiresSession(t *testing.T) {
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/owner/venues", nil)
-	response := httptest.NewRecorder()
-	authHandler(&fakeAuth{}, false).ServeHTTP(response, request)
-	if response.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401, got %d", response.Code)
-	}
-}
-
 func TestLoginDoesNotRevealCredentialFailure(t *testing.T) {
 	service := &fakeAuth{loginErr: identity.ErrInvalidCredentials}
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{"email":"missing@example.com","password":"wrong password"}`))

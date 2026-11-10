@@ -24,7 +24,7 @@ accepted as a table ID, and are not exposed in ordinary public venue responses.
 
 All responses use `Cache-Control: no-store`. Tokens are sent in JSON bodies.
 
-- Owner POST `/api/v1/owner/venues/{venueID}/table-qr`:
+- POST `/api/v1/venues/{venueID}/table-qr` (владелец и менеджер):
   `{ "table_identifier": "07", "rotate": false }` → `{ "qr": { "url": "…", … } }`.
   Requires ownership of the venue. Normalizes the selected saved floor-plan table.
 - Public POST `/api/v1/public/table-qr/resolve`: `{ "token": "…" }` →

@@ -33,7 +33,7 @@ func TestOwnerPublicPageScopesVenueAndKeepsDraftHidden(t *testing.T) {
 		session bool
 		status  int
 	}{{"own-venue", false, 401}, {"someone-else", true, 404}, {"own-venue", true, 200}} {
-		request := httptest.NewRequest("GET", "/api/v1/owner/venues/"+tc.path+"/public-page?locale=sk", nil)
+		request := httptest.NewRequest("GET", "/api/v1/venues/"+tc.path+"/public-page?locale=sk", nil)
 		if tc.session {
 			request.AddCookie(&http.Cookie{Name: "session", Value: "secret"})
 		}

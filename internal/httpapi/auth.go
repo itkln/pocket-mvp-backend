@@ -1,33 +1,15 @@
 package httpapi
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"net"
 	"net/http"
-	"time"
 
 	"pocket-mvp-backend/internal/modules/identity"
 )
 
-const maxAuthBody = 64 << 10
-const maxAvatarBody = 2 << 20
+// Sign-up, sign-in, sign-out and password reset: the routes that start or end a session.
 
-func (api *API) currentUser(w http.ResponseWriter, r *http.Request) (identity.User, bool) {
-	cookie, err := r.Cookie(api.sessionCookie)
-	if err != nil {
-		api.writeAuthError(w, identity.ErrUnauthorized)
-		return identity.User{}, false
-	}
-	user, err := api.identity.Authenticate(r.Context(), cookie.Value)
-	if err != nil {
-		api.writeAuthError(w, err)
-		return identity.User{}, false
-	}
-	return user, true
-}
+const maxAuthBody = 64 << 10
 
 type registerRequest struct {
 	FirstName string `json:"first_name"`
@@ -53,22 +35,6 @@ type passwordResetConfirmation struct {
 	Password string `json:"password"`
 }
 
-type changePasswordRequest struct {
-	CurrentPassword string `json:"current_password"`
-	NewPassword     string `json:"new_password"`
-}
-
-type changeEmailRequest struct {
-	CurrentPassword string `json:"current_password"`
-	NewEmail        string `json:"new_email"`
-}
-
-type updateProfileRequest struct {
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Phone     string `json:"phone"`
-}
-
 type authResponse struct {
 	User authUserResponse `json:"user"`
 }
@@ -78,18 +44,17 @@ type authUserResponse struct {
 	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
-type errorEnvelope struct {
-	Error apiError `json:"error"`
-}
-
-type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+func newAuthResponse(user identity.User) authResponse {
+	response := authUserResponse{User: user}
+	if user.AvatarVersion > 0 {
+		response.AvatarURL = fmt.Sprintf("/api/v1/auth/me/avatar?v=%d", user.AvatarVersion)
+	}
+	return authResponse{User: response}
 }
 
 func (api *API) register(w http.ResponseWriter, r *http.Request) {
 	var request registerRequest
-	if !decodeAuthJSON(w, r, &request) {
+	if !decodeJSON(w, r, &request) {
 		return
 	}
 	user, session, err := api.identity.Register(r.Context(), identity.RegisterInput{
@@ -102,17 +67,16 @@ func (api *API) register(w http.ResponseWriter, r *http.Request) {
 		IPAddress: clientIP(r),
 	})
 	if err != nil {
-		api.writeAuthError(w, err)
+		api.writeError(w, r, err, authErrors)
 		return
 	}
 	api.setSessionCookie(w, session)
-	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusCreated, newAuthResponse(user))
 }
 
 func (api *API) login(w http.ResponseWriter, r *http.Request) {
 	var request loginRequest
-	if !decodeAuthJSON(w, r, &request) {
+	if !decodeJSON(w, r, &request) {
 		return
 	}
 	user, session, err := api.identity.Login(r.Context(), identity.LoginInput{
@@ -122,280 +86,51 @@ func (api *API) login(w http.ResponseWriter, r *http.Request) {
 		IPAddress: clientIP(r),
 	})
 	if err != nil {
-		api.writeAuthError(w, err)
+		api.writeError(w, r, err, authErrors)
 		return
 	}
 	api.setSessionCookie(w, session)
-	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, newAuthResponse(user))
 }
 
-func (api *API) me(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(api.sessionCookie)
-	if err != nil {
-		api.writeAuthError(w, identity.ErrUnauthorized)
-		return
-	}
-	user, err := api.identity.Authenticate(r.Context(), cookie.Value)
-	if err != nil {
-		api.writeAuthError(w, err)
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, newAuthResponse(user))
-}
-
-func (api *API) updateProfile(w http.ResponseWriter, r *http.Request) {
-	user, ok := api.currentUser(w, r)
-	if !ok {
-		return
-	}
-	var request updateProfileRequest
-	if !decodeAuthJSON(w, r, &request) {
-		return
-	}
-	updated, err := api.identity.UpdateProfile(r.Context(), user.ID, identity.UpdateProfileInput{
-		FirstName: request.FirstName,
-		LastName:  request.LastName,
-		Phone:     request.Phone,
-	})
-	if err != nil {
-		api.writeAuthError(w, err)
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, newAuthResponse(updated))
-}
-
+// logout works without a valid session too: it always clears the cookie.
 func (api *API) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(api.sessionCookie); err == nil {
 		if err := api.identity.Logout(r.Context(), cookie.Value); err != nil {
-			api.logger.Error("revoke session", "error", err)
-			api.writeAuthError(w, err)
+			api.writeError(w, r, err, authErrors)
 			return
 		}
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: api.sessionCookie, Value: "", Path: "/", MaxAge: -1,
-		HttpOnly: true, Secure: api.sessionSecure, SameSite: http.SameSiteLaxMode,
-	})
-	w.Header().Set("Cache-Control", "no-store")
+	api.clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (api *API) requestPasswordReset(w http.ResponseWriter, r *http.Request) {
 	var request passwordResetRequest
-	if !decodeAuthJSON(w, r, &request) {
+	if !decodeJSON(w, r, &request) {
 		return
 	}
 	err := api.identity.RequestPasswordReset(r.Context(), identity.PasswordResetRequest{
 		Email: request.Email, Locale: request.Locale, Product: request.Product, IPAddress: clientIP(r),
 	})
 	if err != nil {
-		if errors.Is(err, identity.ErrInvalidInput) {
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the submitted data.")
-			return
-		}
-		api.logger.Error("request password reset", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The request could not be completed.")
+		api.writeError(w, r, err, passwordResetErrors)
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
 }
 
 func (api *API) resetPassword(w http.ResponseWriter, r *http.Request) {
 	var request passwordResetConfirmation
-	if !decodeAuthJSON(w, r, &request) {
+	if !decodeJSON(w, r, &request) {
 		return
 	}
 	err := api.identity.ResetPassword(r.Context(), identity.PasswordResetConfirmation{
 		Token: request.Token, Password: request.Password,
 	})
 	if err != nil {
-		switch {
-		case errors.Is(err, identity.ErrInvalidResetToken):
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_reset_token", "This link is invalid or has expired.")
-		case errors.Is(err, identity.ErrInvalidInput):
-			writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the submitted data.")
-		default:
-			api.logger.Error("reset password", "error", err)
-			writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The request could not be completed.")
-		}
+		api.writeError(w, r, err, passwordResetErrors)
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (api *API) changePassword(w http.ResponseWriter, r *http.Request) {
-	user, ok := api.currentUser(w, r)
-	if !ok {
-		return
-	}
-	cookie, err := r.Cookie(api.sessionCookie)
-	if err != nil {
-		api.writeAuthError(w, identity.ErrUnauthorized)
-		return
-	}
-	var request changePasswordRequest
-	if !decodeAuthJSON(w, r, &request) {
-		return
-	}
-	err = api.identity.ChangePassword(r.Context(), identity.ChangePasswordInput{
-		UserID: user.ID, SessionToken: cookie.Value,
-		CurrentPassword: request.CurrentPassword, NewPassword: request.NewPassword,
-	})
-	if err != nil {
-		api.writeAuthError(w, err)
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (api *API) changeEmail(w http.ResponseWriter, r *http.Request) {
-	user, ok := api.currentUser(w, r)
-	if !ok {
-		return
-	}
-	var request changeEmailRequest
-	if !decodeAuthJSON(w, r, &request) {
-		return
-	}
-	updated, err := api.identity.ChangeEmail(r.Context(), identity.ChangeEmailInput{
-		UserID: user.ID, CurrentPassword: request.CurrentPassword, NewEmail: request.NewEmail,
-	})
-	if err != nil {
-		api.writeAuthError(w, err)
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, newAuthResponse(updated))
-}
-
-func (api *API) updateAvatar(w http.ResponseWriter, r *http.Request) {
-	user, ok := api.currentUser(w, r)
-	if !ok {
-		return
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxAvatarBody+(64<<10))
-	if err := r.ParseMultipartForm(maxAvatarBody); err != nil {
-		writeAPIError(w, http.StatusRequestEntityTooLarge, "avatar_too_large", "The photo must be smaller than 2 MB.")
-		return
-	}
-	if r.MultipartForm != nil {
-		defer r.MultipartForm.RemoveAll()
-	}
-	file, _, err := r.FormFile("avatar")
-	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid_avatar", "Choose a photo.")
-		return
-	}
-	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, maxAvatarBody+1))
-	if err != nil || len(data) == 0 || len(data) > maxAvatarBody {
-		writeAPIError(w, http.StatusRequestEntityTooLarge, "avatar_too_large", "The photo must be smaller than 2 MB.")
-		return
-	}
-	contentType := http.DetectContentType(data)
-	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_avatar", "Use a JPEG, PNG, or WebP image.")
-		return
-	}
-	updated, err := api.identity.UpdateAvatar(r.Context(), user.ID, contentType, data)
-	if err != nil {
-		api.writeAuthError(w, err)
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, newAuthResponse(updated))
-}
-
-func (api *API) avatar(w http.ResponseWriter, r *http.Request) {
-	user, ok := api.currentUser(w, r)
-	if !ok {
-		return
-	}
-	avatar, err := api.identity.Avatar(r.Context(), user.ID)
-	if errors.Is(err, identity.ErrAvatarNotFound) {
-		writeAPIError(w, http.StatusNotFound, "avatar_not_found", "Photo not found.")
-		return
-	}
-	if err != nil {
-		api.writeAuthError(w, err)
-		return
-	}
-	w.Header().Set("Content-Type", avatar.ContentType)
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(avatar.Data)))
-	w.Header().Set("Cache-Control", "private, max-age=300")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(avatar.Data)
-}
-
-func newAuthResponse(user identity.User) authResponse {
-	response := authUserResponse{User: user}
-	if user.AvatarVersion > 0 {
-		response.AvatarURL = fmt.Sprintf("/api/v1/auth/me/avatar?v=%d", user.AvatarVersion)
-	}
-	return authResponse{User: response}
-}
-
-func (api *API) setSessionCookie(w http.ResponseWriter, session identity.Session) {
-	http.SetCookie(w, &http.Cookie{
-		Name: api.sessionCookie, Value: session.Token, Path: "/",
-		Expires: session.ExpiresAt, MaxAge: int(session.ExpiresAt.Sub(timeNow()).Seconds()),
-		HttpOnly: true, Secure: api.sessionSecure, SameSite: http.SameSiteLaxMode,
-	})
-}
-
-var timeNow = func() time.Time { return time.Now().UTC() }
-
-func decodeAuthJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, maxAuthBody)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		writeAPIError(w, http.StatusBadRequest, "invalid_request", "Check the submitted data.")
-		return false
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		writeAPIError(w, http.StatusBadRequest, "invalid_request", "Check the submitted data.")
-		return false
-	}
-	return true
-}
-
-func (api *API) writeAuthError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, identity.ErrInvalidInput):
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_input", "Check the form fields. The password must be 12 to 128 characters long.")
-	case errors.Is(err, identity.ErrEmailAlreadyExists):
-		writeAPIError(w, http.StatusConflict, "account_exists", "An account with this email already exists.")
-	case errors.Is(err, identity.ErrInvalidCredentials):
-		writeAPIError(w, http.StatusUnauthorized, "invalid_credentials", "Incorrect email or password.")
-	case errors.Is(err, identity.ErrInvalidCurrentPassword):
-		writeAPIError(w, http.StatusUnprocessableEntity, "invalid_current_password", "The current password is incorrect.")
-	case errors.Is(err, identity.ErrTooManyAttempts):
-		writeAPIError(w, http.StatusTooManyRequests, "too_many_attempts", "Too many attempts. Please try again in 15 minutes.")
-	case errors.Is(err, identity.ErrUnauthorized):
-		writeAPIError(w, http.StatusUnauthorized, "unauthorized", "Sign in to continue.")
-	default:
-		api.logger.Error("authentication request failed", "error", err)
-		writeAPIError(w, http.StatusInternalServerError, "internal_server_error", "The request could not be completed.")
-	}
-}
-
-func writeAPIError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, status, errorEnvelope{Error: apiError{Code: code, Message: message}})
-}
-
-func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return r.RemoteAddr
 }

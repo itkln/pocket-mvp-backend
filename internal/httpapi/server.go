@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"runtime/debug"
 	"slices"
@@ -132,10 +131,4 @@ type statusRecorder struct {
 func (w *statusRecorder) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
-}
-
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
 }

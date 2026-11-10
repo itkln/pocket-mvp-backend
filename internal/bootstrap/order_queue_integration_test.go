@@ -195,32 +195,31 @@ func TestOrderQueueIntegration(t *testing.T) {
 			must(err)
 		}
 	}
-	call := func(actor, prefix, path string) *httptest.ResponseRecorder {
+	call := func(actor, path string) *httptest.ResponseRecorder {
 		handler := httpapi.New(httpapi.Dependencies{Ordering: svc, Identity: venueHistoryIdentity{userID: actors[actor]}, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), SessionCookie: "session"})
-		req := httptest.NewRequest("GET", "/api/v1/"+prefix+"/venues/"+venue+"/orders"+path, nil)
+		req := httptest.NewRequest("GET", "/api/v1/venues/"+venue+"/orders"+path, nil)
 		req.AddCookie(&http.Cookie{Name: "session", Value: "valid-account-session"})
 		out := httptest.NewRecorder()
 		handler.ServeHTTP(out, req)
 		return out
 	}
-	for _, prefix := range []string{"owner", "staff"} {
-		for role := range actors {
-			for _, suffix := range []string{"?limit=1", "/" + activeID} {
-				out := call(role, prefix, suffix)
-				if role == "outsider" {
-					if out.Code != 404 {
-						t.Fatal(role, out.Code, out.Body)
-					}
-					continue
-				}
-				if out.Code != 200 {
+	// One venue route serves the owner and the staff; the venue role decides.
+	for role := range actors {
+		for _, suffix := range []string{"?limit=1", "/" + activeID} {
+			out := call(role, suffix)
+			if role == "outsider" {
+				if out.Code != 404 {
 					t.Fatal(role, out.Code, out.Body)
 				}
+				continue
+			}
+			if out.Code != 200 {
+				t.Fatal(role, out.Code, out.Body)
 			}
 		}
 	}
 	for _, suffix := range []string{"?limit=0", "?limit=oops", "?limit=101", "?status=wat", "/not-uuid", "?cursor=bad"} {
-		if out := call("owner", "owner", suffix); out.Code != 422 {
+		if out := call("owner", suffix); out.Code != 422 {
 			t.Fatal(suffix, out.Code, out.Body)
 		}
 	}
@@ -283,10 +282,10 @@ func TestOrderQueueIntegration(t *testing.T) {
 			_, err = db.Exec(ctx, `UPDATE venue_staff SET status='active',removed_at=now() WHERE user_id=$1`, actors["waiter"])
 		}
 		must(err)
-		if out := call("waiter", "staff", "/"+activeID); out.Code != 404 {
+		if out := call("waiter", "/"+activeID); out.Code != 404 {
 			t.Fatal("inactive/removed staff detail", out.Code)
 		}
-		if out := call("waiter", "staff", ""); out.Code != 404 {
+		if out := call("waiter", ""); out.Code != 404 {
 			t.Fatal("inactive/removed staff list", out.Code)
 		}
 	}

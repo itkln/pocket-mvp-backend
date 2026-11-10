@@ -151,7 +151,7 @@ func TestChiRoutePassesVenuePathParameter(t *testing.T) {
 		Venues:         venueService,
 		SessionCookie:  "pocket_session",
 	})
-	request := httptest.NewRequest(http.MethodDelete, "/api/v1/owner/venues/venue-42", nil)
+	request := httptest.NewRequest(http.MethodDelete, "/api/v1/venues/venue-42", nil)
 	request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-token"})
 	response := httptest.NewRecorder()
 

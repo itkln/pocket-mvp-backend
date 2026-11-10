@@ -66,7 +66,7 @@ func TestStaffInvitationIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := "/owner/venues/" + venue + "/staff"
+	base := "/venues/" + venue + "/team"
 	create := func() *httptest.ResponseRecorder {
 		return call("POST", base, `{"display_name":"Waiter","email":"invite-kitchen@example.com","role":"waiter"}`, owner)
 	}
@@ -159,12 +159,12 @@ func TestStaffInvitationIntegration(t *testing.T) {
 	if !strings.Contains(w.Body.String(), venue) {
 		t.Fatal("assigned venue missing")
 	}
-	want(call("GET", "/owner/venues/"+venue+"/staff", "", staff), 404)
-	want(call("GET", "/staff/venues/"+venue+"/orders", "", staff), 200)
+	want(call("GET", "/venues/"+venue+"/team", "", staff), 404)
+	want(call("GET", "/venues/"+venue+"/orders", "", staff), 200)
 	want(call("POST", accept, payload(replacement), staff), 404)
 	// Removing membership immediately revokes permissions in an existing session.
 	want(call("DELETE", base+"/"+member, "", owner), 204)
-	want(call("GET", "/staff/venues/"+venue+"/orders", "", staff), 404)
+	want(call("GET", "/venues/"+venue+"/orders", "", staff), 404)
 	w = call("GET", "/staff/venues", "", staff)
 	want(w, 200)
 	if strings.Contains(w.Body.String(), venue) {

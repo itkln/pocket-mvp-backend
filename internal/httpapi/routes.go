@@ -6,6 +6,16 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// The API has one group per audience. Public routes serve guests in Dish; every other group
+// needs a session (requireUser), and its responses are never cached (noStore).
+//
+//   - /public    guests: venue pages, bookings, table QR orders and bills;
+//   - /auth      sign-up, sign-in, password reset, and the signed-in user's own account;
+//   - /customer  a signed-in guest's own bookings;
+//   - /owner     the owner's workspace as a whole: their venues and the subscription;
+//   - /staff     where a user works, and staff invitations;
+//   - /venues/{venueID}  one venue's workspace. Whether the user may do something there is the
+//     venue role's capability, checked by the module (access.Capability); the URL carries no role.
 func (api *API) routes() http.Handler {
 	router := chi.NewRouter()
 	router.Use(api.recoverPanic)
@@ -17,87 +27,115 @@ func (api *API) routes() http.Handler {
 	router.Get("/healthz", api.health)
 	router.Get("/readyz", api.ready)
 	router.Get("/api/v1", api.serviceInfo)
-	router.Post("/api/v1/public/table-qr/resolve", api.resolveTableQR)
-	router.Post("/api/v1/public/table-bill", api.currentTableBill)
-	router.Post("/api/v1/staff/invitations/inspect", api.inspectStaffInvitation)
-	router.Post("/api/v1/staff/invitations/accept", api.acceptStaffInvitation)
-	router.Get("/api/v1/staff/venues", api.listStaffVenues)
-	router.Get("/api/v1/staff/venues/{venueID}/order-alert-settings", api.getOrderAlertSettings)
-	router.Get("/api/v1/staff/venues/{venueID}/orders", api.listOwnerOrders)
-	router.Get("/api/v1/staff/venues/{venueID}/orders/{resourceID}", api.getOwnerOrder)
-	router.Patch("/api/v1/staff/venues/{venueID}/orders/{resourceID}", api.updateOwnerOrderStatus)
-	router.Post("/api/v1/public/table-orders", api.createTableOrder)
-	router.Post("/api/v1/public/table-orders/lookup", api.lookupTableOrder)
-	router.Post("/api/v1/public/table-orders/history", api.tableOrderHistory)
-	router.Get("/api/v1/public/venues/{venueID}", api.getPublicVenue)
-	router.Get("/api/v1/public/venues/{venueID}/menu", api.getPublicVenueMenu)
-	router.Get("/api/v1/public/venues/{venueID}/reviews", api.getPublicVenueReviews)
-	router.Get("/api/v1/public/venues/{venueID}/availability", api.getPublicVenueAvailability)
-	router.Post("/api/v1/public/venues/{venueID}/reservations", api.createPublicReservation)
-	router.Post("/api/v1/public/venues/{venueID}/reservations/holds", api.holdPublicReservation)
-	router.Post("/api/v1/public/venues/{venueID}/reservations/{reservationID}/confirm", api.confirmPublicReservation)
-	router.Get("/api/v1/public/venues/{venueID}/reservations/{reservationID}", api.getPublicReservation)
-	router.Get("/api/v1/customer/reservations", api.listCustomerReservations)
-	router.Post("/api/v1/customer/reservations/{reservationID}/cancel", api.cancelCustomerReservation)
 
-	router.Route("/api/v1/auth", func(router chi.Router) {
-		router.Post("/register", api.register)
-		router.Post("/login", api.login)
-		router.Post("/logout", api.logout)
-		router.Get("/me", api.me)
-		router.Patch("/me", api.updateProfile)
-		router.Get("/me/avatar", api.avatar)
-		router.Post("/me/avatar", api.updateAvatar)
-		router.Post("/password-reset/request", api.requestPasswordReset)
-		router.Post("/password-reset/confirm", api.resetPassword)
-		router.Post("/password/change", api.changePassword)
-		router.Post("/email/change", api.changeEmail)
+	router.Route("/api/v1", func(v1 chi.Router) {
+		v1.Route("/public", api.publicRoutes)
+		v1.Route("/auth", api.authRoutes)
+		v1.Group(func(private chi.Router) {
+			private.Use(noStore, api.requireUser)
+			private.Route("/customer", api.customerRoutes)
+			private.Route("/owner", api.ownerRoutes)
+			private.Route("/staff", api.staffRoutes)
+			private.Route("/venues/{venueID}", api.venueRoutes)
+		})
 	})
-
-	router.Route("/api/v1/owner", func(router chi.Router) {
-		router.Get("/venues", api.listOwnerVenues)
-		router.Post("/venues", api.createOwnerVenue)
-		router.Get("/venues/{venueID}/public-page", api.ownerPublicPage)
-		router.Patch("/venues/{venueID}", api.updateOwnerVenue)
-		router.Delete("/venues/{venueID}", api.deleteOwnerVenue)
-		router.Get("/venues/{venueID}/dashboard", api.getOwnerDashboard)
-
-		router.Get("/venues/{venueID}/categories", api.listOwnerCategories)
-		router.Post("/venues/{venueID}/categories", api.createOwnerCategory)
-		router.Put("/venues/{venueID}/categories/order", api.reorderOwnerCategories)
-		router.Patch("/venues/{venueID}/categories/{resourceID}", api.updateOwnerCategory)
-		router.Delete("/venues/{venueID}/categories/{resourceID}", api.deleteOwnerCategory)
-
-		router.Get("/venues/{venueID}/menu-items", api.listOwnerMenuItems)
-		router.Post("/venues/{venueID}/menu-items", api.createOwnerMenuItem)
-		router.Put("/venues/{venueID}/menu-items/order", api.reorderOwnerMenuItems)
-		router.Patch("/venues/{venueID}/menu-items/{resourceID}", api.updateOwnerMenuItem)
-		router.Delete("/venues/{venueID}/menu-items/{resourceID}", api.deleteOwnerMenuItem)
-
-		router.Get("/venues/{venueID}/staff", api.listOwnerStaff)
-		router.Post("/venues/{venueID}/staff", api.createOwnerStaffMember)
-		router.Post("/venues/{venueID}/staff/{resourceID}/invite", api.resendStaffInvitation)
-		router.Patch("/venues/{venueID}/staff/{resourceID}", api.updateOwnerStaffMember)
-		router.Delete("/venues/{venueID}/staff/{resourceID}", api.deleteOwnerStaffMember)
-
-		router.Get("/venues/{venueID}/order-alert-settings", api.getOrderAlertSettings)
-		router.Put("/venues/{venueID}/order-alert-settings", api.saveOrderAlertSettings)
-		router.Get("/venues/{venueID}/orders", api.listOwnerOrders)
-		router.Get("/venues/{venueID}/orders/{resourceID}", api.getOwnerOrder)
-		router.Patch("/venues/{venueID}/orders/{resourceID}", api.updateOwnerOrderStatus)
-		router.Get("/venues/{venueID}/reviews", api.listOwnerReviews)
-		router.Patch("/venues/{venueID}/reviews/{resourceID}", api.replyToOwnerReview)
-		router.Get("/venues/{venueID}/payments", api.listOwnerPayments)
-		router.Get("/venues/{venueID}/floor-plan", api.getOwnerFloorPlan)
-		router.Post("/venues/{venueID}/table-qr", api.issueTableQR)
-		router.Put("/venues/{venueID}/floor-plan", api.updateOwnerFloorPlan)
-		router.Get("/subscription", api.getOwnerSubscription)
-		router.Put("/subscription", api.updateOwnerSubscription)
-	})
-
 	return router
 }
 
-func pathParam(r *http.Request, name string) string {
-	return chi.URLParam(r, name)
+func (api *API) publicRoutes(public chi.Router) {
+	public.Get("/venues/{venueID}", api.getPublicVenue)
+	public.Get("/venues/{venueID}/menu", api.getPublicVenueMenu)
+	public.Get("/venues/{venueID}/reviews", api.getPublicVenueReviews)
+	public.Get("/venues/{venueID}/availability", api.getPublicVenueAvailability)
+	public.Post("/venues/{venueID}/reservations", api.createPublicReservation)
+	public.Post("/venues/{venueID}/reservations/holds", api.holdPublicReservation)
+	public.Post("/venues/{venueID}/reservations/{reservationID}/confirm", api.confirmPublicReservation)
+	public.Get("/venues/{venueID}/reservations/{reservationID}", api.getPublicReservation)
+
+	public.Post("/table-qr/resolve", api.resolveTableQR)
+	public.Post("/table-bill", api.currentTableBill)
+	public.Post("/table-orders", api.createTableOrder)
+	public.Post("/table-orders/lookup", api.lookupTableOrder)
+	public.Post("/table-orders/history", api.tableOrderHistory)
+}
+
+func (api *API) authRoutes(auth chi.Router) {
+	auth.Use(noStore)
+	auth.Group(func(entry chi.Router) {
+		entry.Use(limitBody(maxAuthBody))
+		entry.Post("/register", api.register)
+		entry.Post("/login", api.login)
+		entry.Post("/logout", api.logout)
+		entry.Post("/password-reset/request", api.requestPasswordReset)
+		entry.Post("/password-reset/confirm", api.resetPassword)
+	})
+	auth.Group(func(account chi.Router) {
+		account.Use(api.requireUser)
+		account.Get("/me", api.me)
+		account.Get("/me/avatar", api.avatar)
+		account.Post("/me/avatar", api.updateAvatar)
+		account.With(limitBody(maxAuthBody)).Patch("/me", api.updateProfile)
+		account.With(limitBody(maxAuthBody)).Post("/password/change", api.changePassword)
+		account.With(limitBody(maxAuthBody)).Post("/email/change", api.changeEmail)
+	})
+}
+
+func (api *API) customerRoutes(customer chi.Router) {
+	customer.Get("/reservations", api.listCustomerReservations)
+	customer.Post("/reservations/{reservationID}/cancel", api.cancelCustomerReservation)
+}
+
+func (api *API) ownerRoutes(owner chi.Router) {
+	owner.Get("/venues", api.listOwnerVenues)
+	owner.Post("/venues", api.createOwnerVenue)
+	owner.Get("/subscription", api.getOwnerSubscription)
+	owner.Put("/subscription", api.updateOwnerSubscription)
+}
+
+func (api *API) staffRoutes(staff chi.Router) {
+	staff.Get("/venues", api.listWorkplaces)
+	staff.Post("/invitations/inspect", api.inspectStaffInvitation)
+	staff.Post("/invitations/accept", api.acceptStaffInvitation)
+}
+
+func (api *API) venueRoutes(venue chi.Router) {
+	// Settings: managers and the owner; deleting the venue: the owner.
+	venue.Patch("/", api.updateVenue)
+	venue.Delete("/", api.deleteVenue)
+	venue.Get("/public-page", api.venuePublicPage)
+
+	// Orders: the whole team.
+	venue.Get("/orders", api.listOrders)
+	venue.Get("/orders/{orderID}", api.getOrder)
+	venue.Patch("/orders/{orderID}", api.updateOrderStatus)
+	venue.Get("/order-alert-settings", api.getOrderAlertSettings)
+	venue.Put("/order-alert-settings", api.saveOrderAlertSettings)
+
+	// Menu: managers and the owner.
+	venue.Get("/categories", api.listCategories)
+	venue.Post("/categories", api.createCategory)
+	venue.Put("/categories/order", api.reorderCategories)
+	venue.Patch("/categories/{categoryID}", api.updateCategory)
+	venue.Delete("/categories/{categoryID}", api.deleteCategory)
+	venue.Get("/menu-items", api.listMenuItems)
+	venue.Post("/menu-items", api.createMenuItem)
+	venue.Put("/menu-items/order", api.reorderMenuItems)
+	venue.Patch("/menu-items/{itemID}", api.updateMenuItem)
+	venue.Delete("/menu-items/{itemID}", api.deleteMenuItem)
+
+	// Floor: managers and the owner.
+	venue.Get("/floor-plan", api.getFloorPlan)
+	venue.Put("/floor-plan", api.updateFloorPlan)
+	venue.Post("/table-qr", api.issueTableQR)
+
+	// The rest: the owner.
+	venue.Get("/dashboard", api.getDashboard)
+	venue.Get("/team", api.listTeam)
+	venue.Post("/team", api.createTeamMember)
+	venue.Patch("/team/{memberID}", api.updateTeamMember)
+	venue.Delete("/team/{memberID}", api.deleteTeamMember)
+	venue.Post("/team/{memberID}/invite", api.resendTeamInvitation)
+	venue.Get("/reviews", api.listReviews)
+	venue.Patch("/reviews/{reviewID}", api.replyToReview)
+	venue.Get("/payments", api.listPayments)
 }
