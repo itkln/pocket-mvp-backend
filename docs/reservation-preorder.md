@@ -35,7 +35,7 @@ in `_test`.
 
 ## E-15 / E-27: cancelling an account reservation
 
-`POST /api/v1/spots/me/reservations/{reservationID}/cancel` requires the current
+`POST /api/v1/customer/reservations/{reservationID}/cancel` requires the current
 account session. Ownership is taken from the session; foreign, missing and
 unfinished hold IDs all return `404`. Malformed IDs return `422`.
 

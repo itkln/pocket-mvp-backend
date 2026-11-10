@@ -12,7 +12,7 @@ import (
 	"pocket-mvp-backend/internal/modules/reservations"
 )
 
-// Exercises the Spots booking and Vendor order read model against an isolated database.
+// Exercises the Dish booking and Vendor order read model against an isolated database.
 func TestReservationPreorderIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()

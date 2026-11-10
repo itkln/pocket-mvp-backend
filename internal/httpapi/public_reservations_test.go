@@ -66,7 +66,7 @@ func TestCustomerReservationsRequiresSessionAndUsesAccountOwnership(t *testing.T
 	service := &reservationRouteSpy{}
 	handler := New(Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Identity: &reservationIdentity{}, Reservations: service, SessionCookie: "pocket_session"})
 	for _, signedIn := range []bool{false, true} {
-		request := httptest.NewRequest(http.MethodGet, "/api/v1/spots/me/reservations?customer_user_id=other-account", nil)
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/customer/reservations?customer_user_id=other-account", nil)
 		if signedIn {
 			request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-session"})
 		}

@@ -59,13 +59,13 @@ func TestRequestPasswordResetSelectsConfiguredProductOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct{ product, host string }{
-		{"dish", "spots.example"}, {"spots", "spots.example"}, {"eats", "spots.example"}, {"vendor", "vendor.example"}, {"", "vendor.example"},
+		{"dish", "dish.example"}, {"vendor", "vendor.example"}, {"", "vendor.example"},
 	} {
 		t.Run("product="+tc.product, func(t *testing.T) {
 			repo := &resetRepositorySpy{found: true, created: true}
 			sender := &resetSenderSpy{}
 			svc, err := NewService(repo, protector, capabilityReaderStub{}, time.Hour, PasswordResetOptions{
-				Sender: sender, BaseURL: "https://vendor.example/", SpotsBaseURL: "https://spots.example/", TTL: 30 * time.Minute,
+				Sender: sender, BaseURL: "https://vendor.example/", DishBaseURL: "https://dish.example/", TTL: 30 * time.Minute,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -88,7 +88,7 @@ func TestRequestPasswordResetSelectsConfiguredProductOrigin(t *testing.T) {
 			if repo.expiresAt.Before(before.Add(30*time.Minute)) || repo.expiresAt.After(time.Now().Add(30*time.Minute)) {
 				t.Fatal("configured expiry not applied")
 			}
-			for _, invalid := range []string{"https://evil.example", "//evil.example", "SPOTS", "unknown"} {
+			for _, invalid := range []string{"https://evil.example", "//evil.example", "spots", "eats", "unknown"} {
 				beforeLookups := repo.lookups
 				if err := svc.RequestPasswordReset(context.Background(), PasswordResetRequest{Email: "guest@example.com", Product: invalid}); !errors.Is(err, ErrInvalidInput) {
 					t.Fatalf("accepted product %q", invalid)
@@ -116,12 +116,12 @@ func TestRequestPasswordResetSelectsConfiguredProductOrigin(t *testing.T) {
 }
 
 func TestPasswordResetBaseURLRejectsUntrustedURLShapes(t *testing.T) {
-	for _, value := range []string{"", "//spots.example", "javascript:alert(1)", "https://user:pass@spots.example", "https://spots.example/path", "https://spots.example?next=x", "https://spots.example?", "https://spots.example/#token", "https:///path"} {
+	for _, value := range []string{"", "//dish.example", "javascript:alert(1)", "https://user:pass@dish.example", "https://dish.example/path", "https://dish.example?next=x", "https://dish.example?", "https://dish.example/#token", "https:///path"} {
 		if _, err := passwordResetBaseURL(value); err == nil {
 			t.Errorf("accepted invalid origin %q", value)
 		}
 	}
-	for _, value := range []string{"https://spots.example", "https://spots.example/", "http://localhost:3001", "http://127.0.0.1:3001"} {
+	for _, value := range []string{"https://dish.example", "https://dish.example/", "http://localhost:3001", "http://127.0.0.1:3001"} {
 		if _, err := passwordResetBaseURL(value); err != nil {
 			t.Errorf("rejected configured origin %q: %v", value, err)
 		}

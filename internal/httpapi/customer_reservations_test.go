@@ -30,7 +30,7 @@ func TestCancelCustomerReservationRoute(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			service := &reservationRouteSpy{cancelErr: test.err}
 			handler := New(Dependencies{Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Identity: &reservationIdentity{}, Reservations: service, SessionCookie: "pocket_session"})
-			request := httptest.NewRequest(http.MethodPost, "/api/v1/spots/me/reservations/20000000-0000-4000-8000-000000000001/cancel?customer_user_id=other-account", strings.NewReader(`{"customer_user_id":"other-account"}`))
+			request := httptest.NewRequest(http.MethodPost, "/api/v1/customer/reservations/20000000-0000-4000-8000-000000000001/cancel?customer_user_id=other-account", strings.NewReader(`{"customer_user_id":"other-account"}`))
 			if test.signedIn {
 				request.AddCookie(&http.Cookie{Name: "pocket_session", Value: "active-session"})
 			}

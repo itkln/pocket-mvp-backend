@@ -22,7 +22,7 @@ func TestStaffInvitationIntegration(t *testing.T) {
 	ctx := context.Background()
 	smtpAddress, messages := resetTestSMTP(t)
 	cfg := config.Config{DataEncryptionKey: []byte("0123456789abcdef0123456789abcdef"), DataLookupKey: []byte("fedcba9876543210fedcba9876543210"),
-		SessionTTL: time.Hour, SessionCookieName: "pocket_session", AppBaseURL: "https://vendor.example", SpotsAppBaseURL: "https://dish.example",
+		SessionTTL: time.Hour, SessionCookieName: "pocket_session", AppBaseURL: "https://vendor.example", DishAppBaseURL: "https://dish.example",
 		PasswordResetTTL: time.Hour, SMTPAddress: smtpAddress, SMTPFrom: "no-reply@pocket.test"}
 	handler, err := NewHTTPHandler(db, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {

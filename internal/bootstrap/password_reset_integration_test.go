@@ -34,9 +34,9 @@ func TestPasswordRecoveryIntegration(t *testing.T) {
 		DataEncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		DataLookupKey:     []byte("fedcba9876543210fedcba9876543210"),
 		SessionTTL:        time.Hour, SessionCookieName: "pocket_session",
-		AppBaseURL: "https://vendor.example", SpotsAppBaseURL: "https://spots.example",
+		AppBaseURL: "https://vendor.example", DishAppBaseURL: "https://dish.example",
 		PasswordResetTTL: 30 * time.Minute, SMTPAddress: smtpAddress, SMTPFrom: "no-reply@pocket.test",
-		AllowedOrigins: []string{"https://vendor.example", "https://spots.example"},
+		AllowedOrigins: []string{"https://vendor.example", "https://dish.example"},
 	}
 	handler, err := NewHTTPHandler(db, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
@@ -68,10 +68,10 @@ func TestPasswordRecoveryIntegration(t *testing.T) {
 	wantStatus(login, http.StatusOK)
 	secondSession := login.Result().Cookies()[0]
 
-	request := call("POST", "/password-reset/request", `{"email":"guest@example.com","locale":"sk","product":"spots"}`, nil)
+	request := call("POST", "/password-reset/request", `{"email":"guest@example.com","locale":"sk","product":"dish"}`, nil)
 	wantStatus(request, http.StatusAccepted)
 	link := resetMessageURL(t, messages)
-	if link.Scheme != "https" || link.Host != "spots.example" || link.Path != "/sk/reset-password" {
+	if link.Scheme != "https" || link.Host != "dish.example" || link.Path != "/sk/reset-password" {
 		t.Fatalf("wrong Spots destination: %s%s", link.Host, link.Path)
 	}
 	token := link.Query().Get("token")
@@ -119,7 +119,7 @@ func TestPasswordRecoveryIntegration(t *testing.T) {
 	wantStatus(call("POST", "/password-reset/confirm", string(expiredBody), nil), http.StatusUnprocessableEntity)
 	wantStatus(call("POST", "/login", `{"email":"guest@example.com","password":"replacement secure password"}`, nil), http.StatusOK)
 
-	unknown := call("POST", "/password-reset/request", `{"email":"missing@example.com","product":"spots"}`, nil)
+	unknown := call("POST", "/password-reset/request", `{"email":"missing@example.com","product":"dish"}`, nil)
 	wantStatus(unknown, http.StatusAccepted)
 	if unknown.Body.String() != request.Body.String() {
 		t.Fatal("response reveals account existence")

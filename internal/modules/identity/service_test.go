@@ -46,7 +46,7 @@ func TestRegisterPassesEncryptedDataAndHashedCredentialsToRepository(t *testing.
 		protector,
 		capabilityReaderStub{},
 		time.Hour,
-		PasswordResetOptions{Sender: resetSenderStub{}, BaseURL: "http://localhost:3000", SpotsBaseURL: "http://localhost:3001", TTL: time.Minute},
+		PasswordResetOptions{Sender: resetSenderStub{}, BaseURL: "http://localhost:3000", DishBaseURL: "http://localhost:3001", TTL: time.Minute},
 	)
 	if err != nil {
 		t.Fatal(err)

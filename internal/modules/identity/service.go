@@ -23,21 +23,21 @@ type PasswordResetSender interface {
 type PasswordResetOptions struct {
 	Sender PasswordResetSender
 	// BaseURL is the Vendor origin, also used by legacy requests without product.
-	BaseURL      string
-	SpotsBaseURL string
-	TTL          time.Duration
+	BaseURL     string
+	DishBaseURL string
+	TTL         time.Duration
 }
 
 type Service struct {
-	repository        Repository
-	protector         *security.DataProtector
-	capabilities      CapabilityReader
-	ttl               time.Duration
-	dummyHash         string
-	resetSender       PasswordResetSender
-	resetBaseURL      string
-	resetSpotsBaseURL string
-	resetTTL          time.Duration
+	repository       Repository
+	protector        *security.DataProtector
+	capabilities     CapabilityReader
+	ttl              time.Duration
+	dummyHash        string
+	resetSender      PasswordResetSender
+	resetBaseURL     string
+	resetDishBaseURL string
+	resetTTL         time.Duration
 }
 
 func NewService(repository Repository, protector *security.DataProtector, capabilities CapabilityReader, ttl time.Duration, reset PasswordResetOptions) (*Service, error) {
@@ -53,20 +53,20 @@ func NewService(repository Repository, protector *security.DataProtector, capabi
 	if err != nil {
 		return nil, fmt.Errorf("vendor password reset URL: %w", err)
 	}
-	spotsURL, err := passwordResetBaseURL(reset.SpotsBaseURL)
+	dishURL, err := passwordResetBaseURL(reset.DishBaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("spots password reset URL: %w", err)
 	}
 	return &Service{
-		repository:        repository,
-		protector:         protector,
-		capabilities:      capabilities,
-		ttl:               ttl,
-		dummyHash:         dummyHash,
-		resetSender:       reset.Sender,
-		resetBaseURL:      vendorURL,
-		resetSpotsBaseURL: spotsURL,
-		resetTTL:          reset.TTL,
+		repository:       repository,
+		protector:        protector,
+		capabilities:     capabilities,
+		ttl:              ttl,
+		dummyHash:        dummyHash,
+		resetSender:      reset.Sender,
+		resetBaseURL:     vendorURL,
+		resetDishBaseURL: dishURL,
+		resetTTL:         reset.TTL,
 	}, nil
 }
 

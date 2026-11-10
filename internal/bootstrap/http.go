@@ -47,10 +47,10 @@ func NewHTTPHandler(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) (h
 		capabilityReader,
 		cfg.SessionTTL,
 		identity.PasswordResetOptions{
-			Sender:       resetSender,
-			BaseURL:      cfg.AppBaseURL,
-			SpotsBaseURL: cfg.SpotsAppBaseURL,
-			TTL:          cfg.PasswordResetTTL,
+			Sender:      resetSender,
+			BaseURL:     cfg.AppBaseURL,
+			DishBaseURL: cfg.DishAppBaseURL,
+			TTL:         cfg.PasswordResetTTL,
 		},
 	)
 	if err != nil {
@@ -61,7 +61,7 @@ func NewHTTPHandler(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) (h
 	availabilityService := availability.NewService(availabilityRepository)
 
 	return httpapi.New(httpapi.Dependencies{
-		DishBaseURL:    cfg.SpotsAppBaseURL,
+		DishBaseURL:    cfg.DishAppBaseURL,
 		Database:       db,
 		Logger:         logger,
 		AllowedOrigins: cfg.AllowedOrigins,
@@ -73,7 +73,7 @@ func NewHTTPHandler(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) (h
 		Catalog:        catalog.NewService(catalog.NewPostgresRepository(db), venueAuthorizer),
 		Workforce:      workforce.NewService(workforce.NewPostgresRepository(db), venueAuthorizer, workforce.InvitationOptions{Sender: resetSender, BaseURL: cfg.AppBaseURL, Protector: protector}),
 		Ordering:       ordering.NewService(ordering.NewPostgresRepository(db, protector), venueAuthorizer),
-		DineIn:         dinein.NewService(dinein.NewPostgresRepository(db), venueAuthorizer, protector, cfg.SpotsAppBaseURL),
+		DineIn:         dinein.NewService(dinein.NewPostgresRepository(db), venueAuthorizer, protector, cfg.DishAppBaseURL),
 		Feedback:       feedback.NewService(feedback.NewPostgresRepository(db), venueAuthorizer),
 		Billing:        billing.NewService(billing.NewPostgresRepository(db), venueAuthorizer),
 		FloorPlan:      floorplan.NewService(floorplan.NewPostgresRepository(db), venueAuthorizer),

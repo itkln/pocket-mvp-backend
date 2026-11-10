@@ -10,7 +10,7 @@ payments, and operations.
 - `chi` routing with routes grouped by business domain.
 - PostgreSQL 17 with persistent local storage.
 - Versioned SQL migrations executed before the API starts.
-- Separate Pocket Vendor and Pocket Spots Next.js images from the sibling
+- Separate Pocket Vendor and Pocket Dish Next.js images from the sibling
   `frontend` repository.
 - Health-gated startup: PostgreSQL -> migrations -> backend -> both frontends.
 - Secure account authentication with Argon2id password hashes, encrypted personal
@@ -50,7 +50,7 @@ docker compose ps
 Services:
 
 - Pocket Vendor: http://localhost:3000
-- Pocket Spots: http://localhost:3001
+- Pocket Dish: http://localhost:3001
 - API metadata: http://localhost:8080/api/v1
 - API liveness: http://localhost:8080/healthz
 - API readiness: http://localhost:8080/readyz
@@ -76,7 +76,7 @@ Populate a local database with a repeatable owner workspace:
 make seed-demo
 ```
 
-Then open Pocket Vendor at http://localhost:3000 or Pocket Spots at
+Then open Pocket Vendor at http://localhost:3000 or Pocket Dish at
 http://localhost:3001 and sign in with:
 
 - E-mail: `demo@pocket.local`
@@ -131,7 +131,7 @@ Endpoints under `/api/v1/auth`:
 - `GET /me` returns the user represented by the HttpOnly session cookie.
 - `POST /logout` revokes the session and clears the cookie.
 - `POST /password-reset/request` accepts `email`, `locale`, and `product`
-  (`spots` or `vendor`) and returns the same 202 response whether or not the
+  (`dish` or `vendor`) and returns the same 202 response whether or not the
   account exists. Missing `product` retains the legacy Vendor destination;
   unknown values return 422 before account lookup.
 - `POST /password-reset/confirm` consumes a single-use reset token, updates the
@@ -152,11 +152,10 @@ Reset links return to the originating product using **server-configured origins*
 
 - `VENDOR_APP_BASE_URL`: Vendor origin; falls back to legacy `APP_BASE_URL`, then
   `http://localhost:3000`.
-- `SPOTS_APP_BASE_URL`: Spots origin; defaults to `http://localhost:3001` only in
-  development and is required in other environments.
-- `EATS_APP_BASE_URL` is accepted only as a deprecated migration fallback when
-  `SPOTS_APP_BASE_URL` is unset. Reset API requests with `product: "eats"` are
-  likewise routed to Spots temporarily; new clients must send `product: "spots"`.
+- `DISH_APP_BASE_URL`: Dish origin; defaults to `http://localhost:3001` only in
+  development and is required in other environments. The former
+  `SPOTS_APP_BASE_URL`/`EATS_APP_BASE_URL` variables and the `spots`/`eats`
+  reset products are no longer accepted (2026-11-10).
 
 Set both to the externally reachable HTTPS origins in production (and adjust
 them when changing local frontend ports). Origins must not contain credentials,
@@ -178,7 +177,7 @@ TEST_DATABASE_URL='postgres://user:password@127.0.0.1:55433/pocket_e03_test?sslm
 
 Use a disposable PostgreSQL database whose name ends in `_test`. The test creates
 and removes its own schema, and requires permission to install `pgcrypto` and
-`btree_gist`. It checks Spots and legacy Vendor destinations, locale, hashed-token
+`btree_gist`. It checks Dish and legacy Vendor destinations, locale, hashed-token
 storage and TTL, concurrent single-use consumption, expiration, revocation of
 all old sessions, login with the new password, and non-enumerating responses.
 Production SMTP delivery/TLS and public domains still need environment-specific
@@ -197,23 +196,17 @@ encryption key requires a planned data re-encryption migration.
 
 ## Public venue catalog
 
-Pocket Spots reads published venues without authentication from
-`GET /api/v1/public/venues`. Only non-deleted venues with `status=active` are
-returned. Supported query parameters are `city`, `q`, `category`, `filter`,
-`page`, and `page_size` (maximum 50). The response includes a public venue read
-model plus `total`, `total_pages`, and `has_next`; owner contact details and raw
-venue settings are never exposed.
-
-Venue settings may define `public_category`, `public_filters`, `public_tags`,
-`public_search_terms`, and `cover_image_url`. Missing or invalid categories fall
-back to `restaurants`, so every newly published Vendor venue is discoverable.
-Published review aggregates supply `rating` and `review_count`.
+Pocket Dish reads one published venue without authentication from
+`GET /api/v1/public/venues/{venueID}`. Only non-deleted venues with
+`status=active` are returned; owner contact details and raw venue settings are
+never exposed. Published review aggregates supply `rating` and `review_count`.
+The marketplace search over all venues was removed on 2026-11-10.
 
 `GET /api/v1/public/venues/{venueID}/menu` returns the visible menu of a
 published venue as `{ "categories": [{ "id", "name", "items": [...] }] }`.
 It needs no session and includes only active categories and available,
 non-deleted items. Invalid venue IDs return 422; unpublished or missing venues
-return 404. Pocket Spots uses this read-only projection for venue menu search.
+return 404. Pocket Dish uses this read-only projection for the venue menu.
 
 `GET /api/v1/public/venues/{venueID}/reviews` returns up to 50 most recent
 published reviews for an active venue. The public review view omits guest names,

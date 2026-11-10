@@ -219,11 +219,11 @@ func TestLoginRateLimitError(t *testing.T) {
 
 func TestPasswordResetRequestUsesNonEnumeratingResponse(t *testing.T) {
 	service := &fakeAuth{}
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-reset/request", strings.NewReader(`{"email":"user@example.com","locale":"uk","product":"spots"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password-reset/request", strings.NewReader(`{"email":"user@example.com","locale":"uk","product":"dish"}`))
 	response := httptest.NewRecorder()
 	authHandler(service, false).ServeHTTP(response, request)
 
-	if response.Code != http.StatusAccepted || service.resetRequest.Email != "user@example.com" || service.resetRequest.Locale != "uk" || service.resetRequest.Product != "spots" {
+	if response.Code != http.StatusAccepted || service.resetRequest.Email != "user@example.com" || service.resetRequest.Locale != "uk" || service.resetRequest.Product != "dish" {
 		t.Fatalf("unexpected reset request response: status=%d input=%#v", response.Code, service.resetRequest)
 	}
 	if strings.Contains(strings.ToLower(response.Body.String()), "email") {

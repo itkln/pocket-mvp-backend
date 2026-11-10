@@ -11,7 +11,7 @@ import (
 	"pocket-mvp-backend/internal/modules/venues"
 )
 
-// Opt-in end-to-end database check of the Vendor write model and Spots public projection.
+// Opt-in end-to-end database check of the Vendor write model and Dish public projection.
 func TestPublicMenuIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
@@ -26,7 +26,7 @@ func TestPublicMenuIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	owner := catalog.NewService(catalog.NewPostgresRepository(db), access.NewVenueAuthorizer(db))
-	spots := venues.NewService(venues.NewPostgresRepository(db))
+	dish := venues.NewService(venues.NewPostgresRepository(db))
 	preorderDisabled := false
 	second, err := owner.CreateCategory(ctx, ownerID, venueID, catalog.CategoryInput{Name: "Drinks", SortOrder: 2, PreorderEnabled: &preorderDisabled})
 	if err != nil {
@@ -61,7 +61,7 @@ func TestPublicMenuIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	menu, err := spots.ListPublishedMenu(ctx, venueID)
+	menu, err := dish.ListPublishedMenu(ctx, venueID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestPublicMenuIntegration(t *testing.T) {
 	if err != nil || len(ownedCategories) != 2 || ownedCategories[0].PreorderEnabled || ownedCategories[1].PreorderEnabled {
 		t.Fatalf("Vendor category reload: %+v, %v", ownedCategories, err)
 	}
-	menu, err = spots.ListPublishedMenu(ctx, venueID)
+	menu, err = dish.ListPublishedMenu(ctx, venueID)
 	if err != nil || len(menu) != 2 || menu[0].PreorderEnabled || len(menu[0].Items) != 2 {
 		t.Fatalf("preorder setting hid ordinary menu: %+v, %v", menu, err)
 	}
@@ -114,14 +114,14 @@ func TestPublicMenuIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	menu, err = spots.ListPublishedMenu(ctx, venueID)
+	menu, err = dish.ListPublishedMenu(ctx, venueID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := menu[0].Items[1]; got.ID != item.ID || got.Description != "Updated" ||
 		got.PriceMinor != 825 || got.Currency != "USD" || got.ImageURL != updated.ImageURL ||
 		got.ImageURL != "https://example.test/new.jpg" || got.EnergyKcal == nil || *got.EnergyKcal != 200 {
-		t.Fatalf("Vendor update not reflected in Spots: %+v", got)
+		t.Fatalf("Vendor update not reflected in Dish: %+v", got)
 	}
 
 	base.ImageURL = ""
@@ -129,7 +129,7 @@ func TestPublicMenuIntegration(t *testing.T) {
 	if _, err := owner.UpdateMenuItem(ctx, ownerID, venueID, item.ID, base); err != nil {
 		t.Fatal(err)
 	}
-	menu, err = spots.ListPublishedMenu(ctx, venueID)
+	menu, err = dish.ListPublishedMenu(ctx, venueID)
 	if err != nil || len(menu) != 2 || len(menu[0].Items) != 2 || menu[0].Items[1].ImageURL != "" {
 		t.Fatalf("removed image still public: %+v, %v", menu, err)
 	}
@@ -140,7 +140,7 @@ func TestPublicMenuIntegration(t *testing.T) {
 	if _, err := owner.UpdateMenuItem(ctx, ownerID, venueID, item.ID, base); err != nil {
 		t.Fatal(err)
 	}
-	menu, err = spots.ListPublishedMenu(ctx, venueID)
+	menu, err = dish.ListPublishedMenu(ctx, venueID)
 	if err != nil || len(menu) != 2 || len(menu[0].Items) != 1 || menu[0].Items[0].ID != earlier.ID {
 		t.Fatalf("unavailable item remains public: %+v, %v", menu, err)
 	}
@@ -151,7 +151,7 @@ func TestPublicMenuIntegration(t *testing.T) {
 	if err := owner.DeleteMenuItem(ctx, ownerID, venueID, item.ID); err != nil {
 		t.Fatal(err)
 	}
-	menu, err = spots.ListPublishedMenu(ctx, venueID)
+	menu, err = dish.ListPublishedMenu(ctx, venueID)
 	if err != nil || len(menu) != 2 || len(menu[0].Items) != 1 {
 		t.Fatalf("deleted item remains public: %+v, %v", menu, err)
 	}
@@ -159,14 +159,14 @@ func TestPublicMenuIntegration(t *testing.T) {
 	if _, err := owner.UpdateCategory(ctx, ownerID, venueID, first.ID, catalog.CategoryInput{Name: "Food", SortOrder: 1, IsActive: &active}); err != nil {
 		t.Fatal(err)
 	}
-	menu, err = spots.ListPublishedMenu(ctx, venueID)
+	menu, err = dish.ListPublishedMenu(ctx, venueID)
 	if err != nil || len(menu) != 1 || menu[0].ID != second.ID {
 		t.Fatalf("hidden category remains public: %+v, %v", menu, err)
 	}
 	if _, err := db.Exec(ctx, `UPDATE venues SET status = 'paused' WHERE id = $1`, venueID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := spots.ListPublishedMenu(ctx, venueID); !errors.Is(err, appfault.ErrNotFound) {
+	if _, err := dish.ListPublishedMenu(ctx, venueID); !errors.Is(err, appfault.ErrNotFound) {
 		t.Fatalf("unpublished venue menu is accessible: %v", err)
 	}
 }
