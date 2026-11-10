@@ -61,12 +61,6 @@ type ReservationService interface {
 	GetConfirmed(context.Context, string, string, string) (reservations.Result, error)
 }
 
-type FavoritesService interface {
-	List(context.Context, string) ([]string, error)
-	Add(context.Context, string, string) error
-	Remove(context.Context, string, string) error
-}
-
 type CatalogService interface {
 	ListCategories(context.Context, string, string) ([]catalog.Category, error)
 	CreateCategory(context.Context, string, string, catalog.CategoryInput) (catalog.Category, error)
@@ -95,7 +89,6 @@ type OrderingService interface {
 	ListPage(context.Context, string, string, ordering.Query) (ordering.Page, error)
 	Get(context.Context, string, string, string) (ordering.Order, error)
 	List(context.Context, string, string) ([]ordering.Order, error)
-	ListCustomerPreorders(context.Context, string) ([]ordering.Order, error)
 	UpdateStatus(context.Context, string, string, string, string, string, ...ordering.StatusChange) (ordering.Order, error)
 }
 
@@ -138,7 +131,6 @@ type Dependencies struct {
 	Venues         VenueService
 	Availability   AvailabilityService
 	Reservations   ReservationService
-	Favorites      FavoritesService
 	Catalog        CatalogService
 	Workforce      WorkforceService
 	Ordering       OrderingService
@@ -162,7 +154,6 @@ type API struct {
 	venues         VenueService
 	availability   AvailabilityService
 	reservations   ReservationService
-	favorites      FavoritesService
 	catalog        CatalogService
 	workforce      WorkforceService
 	ordering       OrderingService

@@ -160,19 +160,12 @@ func TestReservationCancellationIntegration(t *testing.T) {
 				t.Fatal("Vendor status stale")
 			}
 		}
-		preorders, err := vendor.ListCustomerPreorders(ctx, customerID)
-		must(t, err)
-		found := false
-		for _, order := range preorders {
-			if order.ID == orderID {
-				found = true
-				if order.Status != "cancelled" {
-					t.Fatal("preorder history stale")
-				}
-			}
+		var preorderStatus string
+		if err := db.QueryRow(ctx, `SELECT status FROM orders WHERE id=$1 AND customer_user_id=$2`, orderID, customerID).Scan(&preorderStatus); err != nil {
+			t.Fatalf("cancelled preorder disappeared from history: %v", err)
 		}
-		if !found {
-			t.Fatal("cancelled preorder disappeared from history")
+		if preorderStatus != "cancelled" {
+			t.Fatal("preorder history stale")
 		}
 		if _, err := service.GetConfirmed(ctx, venueID, created.ID, originalKey); !errors.Is(err, appfault.ErrNotFound) {
 			t.Fatalf("cancelled reservation restored: %v", err)

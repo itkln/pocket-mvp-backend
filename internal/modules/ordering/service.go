@@ -37,9 +37,6 @@ func (s *Service) List(ctx context.Context, ownerID, venueID string) ([]Order, e
 }
 
 // Only dishes attached to confirmed reservations appear in a customer's preorder history.
-func (s *Service) ListCustomerPreorders(ctx context.Context, customerID string) ([]Order, error) {
-	return s.repository.ListCustomerPreorders(ctx, customerID)
-}
 
 func (s *Service) UpdateStatus(ctx context.Context, ownerID, venueID, orderID, status, expected string, details ...StatusChange) (Order, error) {
 	_, err := s.authorizer.OrderRole(ctx, ownerID, venueID)

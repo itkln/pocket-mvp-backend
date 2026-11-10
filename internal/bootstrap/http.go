@@ -14,7 +14,6 @@ import (
 	"pocket-mvp-backend/internal/modules/billing"
 	"pocket-mvp-backend/internal/modules/catalog"
 	"pocket-mvp-backend/internal/modules/dinein"
-	"pocket-mvp-backend/internal/modules/favorites"
 	"pocket-mvp-backend/internal/modules/feedback"
 	"pocket-mvp-backend/internal/modules/floorplan"
 	"pocket-mvp-backend/internal/modules/identity"
@@ -71,7 +70,6 @@ func NewHTTPHandler(db *pgxpool.Pool, cfg config.Config, logger *slog.Logger) (h
 		Venues:         venueService,
 		Availability:   availabilityService,
 		Reservations:   reservations.NewService(reservations.NewPostgresRepository(db), reservationAvailability{availabilityService, availabilityRepository}),
-		Favorites:      favorites.NewService(favorites.NewPostgresRepository(db), venueService),
 		Catalog:        catalog.NewService(catalog.NewPostgresRepository(db), venueAuthorizer),
 		Workforce:      workforce.NewService(workforce.NewPostgresRepository(db), venueAuthorizer, workforce.InvitationOptions{Sender: resetSender, BaseURL: cfg.AppBaseURL, Protector: protector}),
 		Ordering:       ordering.NewService(ordering.NewPostgresRepository(db, protector), venueAuthorizer),

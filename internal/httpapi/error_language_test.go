@@ -33,9 +33,6 @@ func TestDomainErrorsKeepCodesAndUseEnglishMessages(t *testing.T) {
 		{"owner not found", func(w http.ResponseWriter) { api.writeOwnerError(w, appfault.ErrNotFound) }, 404, "not_found", "The resource was not found or is unavailable."},
 		{"owner conflict", func(w http.ResponseWriter) { api.writeOwnerError(w, appfault.ErrConflict) }, 409, "conflict", "The resource already exists or is in use."},
 		{"owner internal error", func(w http.ResponseWriter) { api.writeOwnerError(w, errors.New("storage unavailable")) }, 500, "internal_server_error", "The request could not be completed."},
-		{"saved venue invalid ID", func(w http.ResponseWriter) { api.writeFavoritesError(w, appfault.ErrInvalidInput) }, 422, "invalid_input", "Invalid venue ID."},
-		{"saved venue not found", func(w http.ResponseWriter) { api.writeFavoritesError(w, appfault.ErrNotFound) }, 404, "not_found", "Venue not found."},
-		{"saved venue internal error", func(w http.ResponseWriter) { api.writeFavoritesError(w, errors.New("storage unavailable")) }, 500, "internal_server_error", "Saved places could not be updated."},
 	}
 
 	for _, testCase := range testCases {

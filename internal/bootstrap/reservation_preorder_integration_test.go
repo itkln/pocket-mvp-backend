@@ -183,11 +183,13 @@ func TestReservationPreorderIntegration(t *testing.T) {
 	if err != nil || replayedAccount.PreorderOrderNumber != accountResult.PreorderOrderNumber {
 		t.Fatalf("idempotent preorder confirmation: %+v, %v", replayedAccount, err)
 	}
-	preorders, err := ordering.NewPostgresRepository(db).ListCustomerPreorders(ctx, ownerID)
-	if err != nil || len(preorders) != 1 || preorders[0].Number != accountResult.PreorderOrderNumber ||
-		preorders[0].VenueName != "Preorder Test" || preorders[0].ReservationCode != accountResult.Code ||
-		len(preorders[0].Items) != 1 || preorders[0].Items[0].Name != "Pasta" {
-		t.Fatalf("account preorder history: %+v, %v", preorders, err)
+	// The account's preorder is stored with its reservation and menu snapshot.
+	var preorderID, preorderItem string
+	var preorderNumber int64
+	if err := db.QueryRow(ctx, `SELECT o.id::text, o.order_number, oi.item_name FROM orders o JOIN order_items oi ON oi.order_id = o.id
+		WHERE o.customer_user_id = $1 AND o.channel = 'preorder' AND o.reservation_id = $2`, ownerID, accountResult.ID).
+		Scan(&preorderID, &preorderNumber, &preorderItem); err != nil || preorderNumber != accountResult.PreorderOrderNumber || preorderItem != "Pasta" {
+		t.Fatalf("account preorder history: %d, %s, %v", preorderNumber, preorderItem, err)
 	}
 	var linkedUserID, linkedEmail string
 	if err := db.QueryRow(ctx, `SELECT customer_user_id::text, guest_email FROM reservations WHERE id = $1`, accountResult.ID).
@@ -254,7 +256,7 @@ func TestReservationPreorderIntegration(t *testing.T) {
 		t.Fatalf("manual preparation changed the visit: %+v, %v", prepared, err)
 	}
 	// A stale client cannot advance an accepted order after its booking was cancelled.
-	staleOrderID := preorders[0].ID
+	staleOrderID := preorderID
 	if _, err := orders.UpdateStatus(ctx, venueID, staleOrderID, "accepted"); err != nil {
 		t.Fatal(err)
 	}

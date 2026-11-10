@@ -195,9 +195,10 @@ func TestGratuityIntegration(t *testing.T) {
 	if len(customer) != 1 || customer[0].PreorderTipMinor != 0 || customer[0].PreorderTotalMinor != 1200 {
 		t.Fatalf("customer receipt: %+v", customer)
 	}
-	customerOrders, err := vendor.ListCustomerPreorders(ctx, ownerID)
-	must(err)
-	if len(customerOrders) != 1 || customerOrders[0].TipMinor != 0 {
+	var preorderCount int
+	var preorderTip int64
+	must(db.QueryRow(ctx, `SELECT count(*),COALESCE(sum(tip_minor),0) FROM orders WHERE reservation_id=$1 AND channel='preorder'`, confirmed.ID).Scan(&preorderCount, &preorderTip))
+	if preorderCount != 1 || preorderTip != 0 {
 		t.Fatal("reservation unexpectedly includes tips")
 	}
 	_, err = reservations.NewPostgresRepository(db).CancelCustomer(ctx, ownerID, confirmed.ID)

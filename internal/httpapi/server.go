@@ -21,7 +21,6 @@ func New(deps Dependencies) http.Handler {
 		venues:         deps.Venues,
 		availability:   deps.Availability,
 		reservations:   deps.Reservations,
-		favorites:      deps.Favorites,
 		catalog:        deps.Catalog,
 		workforce:      deps.Workforce,
 		ordering:       deps.Ordering,
