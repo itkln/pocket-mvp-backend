@@ -7,9 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"pocket-mvp-backend/internal/validate"
 	"strings"
 	"unicode/utf8"
+
+	"pocket-mvp-backend/internal/validate"
 
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/gratuity"

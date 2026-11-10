@@ -2,9 +2,10 @@ package dinein
 
 import (
 	"encoding/json"
+	"time"
+
 	"pocket-mvp-backend/internal/gratuity"
 	"pocket-mvp-backend/internal/money"
-	"time"
 )
 
 type Table struct {

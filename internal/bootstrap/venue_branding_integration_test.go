@@ -13,11 +13,7 @@ import (
 func TestVenueBrandingIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	var ownerID string
-	if err := db.QueryRow(ctx, `INSERT INTO users (email, password_hash, first_name, last_name, account_role)
-		VALUES ('branding@example.test', 'test-only', 'Test', 'Owner', 'venue_owner') RETURNING id::text`).Scan(&ownerID); err != nil {
-		t.Fatal(err)
-	}
+	ownerID := seedUser(t, db, "branding@example.test", "venue_owner")
 	service := venues.NewService(venues.NewPostgresRepository(db), access.NewVenueAuthorizer(db))
 	input := venues.Input{Name: "First Bistro", Address: "Main 1", City: "Bratislava", CountryCode: "SK", Timezone: "Europe/Bratislava", Currency: "EUR", Status: "active", Settings: map[string]any{"cover_image_url": "https://example.test/cover.jpg", "preorder_enabled": true}}
 	first, err := service.Create(ctx, ownerID, input)

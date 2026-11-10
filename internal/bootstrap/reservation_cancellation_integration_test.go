@@ -17,20 +17,10 @@ import (
 func TestReservationCancellationIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	var customerID, otherID, venueID, layoutID, categoryID, itemID string
-	must := func(t *testing.T, err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	must(t, db.QueryRow(ctx, `INSERT INTO users (email, password_hash, first_name, last_name, account_role)
-		VALUES ('cancel@example.test', 'test', 'Cancel', 'Guest', 'venue_owner') RETURNING id::text`).Scan(&customerID))
-	must(t, db.QueryRow(ctx, `INSERT INTO users (email, password_hash, first_name, last_name, account_role)
-		VALUES ('other-cancel@example.test', 'test', 'Other', 'Guest', 'customer') RETURNING id::text`).Scan(&otherID))
-	must(t, db.QueryRow(ctx, `INSERT INTO venues (owner_user_id, slug, name, address_line1, city, country_code, timezone, currency, status, settings)
-		VALUES ($1, 'cancel-test', 'Cancel Test', 'Main 1', 'Bratislava', 'SK', 'Europe/Bratislava', 'EUR', 'active',
-		'{"schedule_enabled":true,"same_day_booking":true,"preorder_enabled":true,"public_category":"restaurants"}') RETURNING id::text`, customerID).Scan(&venueID))
+	var layoutID, categoryID, itemID string
+	customerID := seedUser(t, db, "cancel@example.test", "venue_owner")
+	otherID := seedUser(t, db, "other-cancel@example.test", "customer")
+	venueID := seedVenue(t, db, customerID, venueSeed{Slug: "cancel-test", Name: "Cancel Test", Settings: `{"schedule_enabled":true,"same_day_booking":true,"preorder_enabled":true,"public_category":"restaurants"}`})
 	must(t, db.QueryRow(ctx, `INSERT INTO venue_layouts (venue_id, name) VALUES ($1, 'Main') RETURNING id::text`, venueID).Scan(&layoutID))
 	_, err := db.Exec(ctx, `INSERT INTO venue_tables (venue_id, layout_id, identifier, seats, qr_token_hash) VALUES ($1, $2, 'A1', 4, 'cancel-test-a1')`, venueID, layoutID)
 	must(t, err)

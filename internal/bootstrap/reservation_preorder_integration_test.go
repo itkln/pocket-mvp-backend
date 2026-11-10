@@ -16,20 +16,10 @@ import (
 func TestReservationPreorderIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	var ownerID, venueID, categoryID, itemID, otherVenueID, foreignItemID string
-	if err := db.QueryRow(ctx, `INSERT INTO users (email, password_hash, first_name, last_name, account_role)
-		VALUES ('preorder-owner@example.test', 'test-only', 'Preorder', 'Owner', 'venue_owner') RETURNING id::text`).Scan(&ownerID); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.QueryRow(ctx, `INSERT INTO venues (owner_user_id, slug, name, address_line1, city, country_code, timezone, currency, status, settings)
-		VALUES ($1, 'preorder-test', 'Preorder Test', 'Main 1', 'Bratislava', 'SK', 'Europe/Bratislava', 'EUR', 'active',
-		'{"schedule_enabled":true,"same_day_booking":true,"preorder_enabled":true,"public_category":"restaurants"}') RETURNING id::text`, ownerID).Scan(&venueID); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.QueryRow(ctx, `INSERT INTO venues (owner_user_id, slug, name, address_line1, city, country_code, timezone, currency, status)
-		VALUES ($1, 'other-preorder-test', 'Other Test', 'Main 2', 'Bratislava', 'SK', 'Europe/Bratislava', 'EUR', 'active') RETURNING id::text`, ownerID).Scan(&otherVenueID); err != nil {
-		t.Fatal(err)
-	}
+	var categoryID, itemID, foreignItemID string
+	ownerID := seedUser(t, db, "preorder-owner@example.test", "venue_owner")
+	venueID := seedVenue(t, db, ownerID, venueSeed{Slug: "preorder-test", Name: "Preorder Test", Settings: `{"schedule_enabled":true,"same_day_booking":true,"preorder_enabled":true,"public_category":"restaurants"}`})
+	otherVenueID := seedVenue(t, db, ownerID, venueSeed{Slug: "other-preorder-test", Name: "Other Test"})
 	var layoutID string
 	if err := db.QueryRow(ctx, `INSERT INTO venue_layouts (venue_id, name) VALUES ($1, 'Main') RETURNING id::text`, venueID).Scan(&layoutID); err != nil {
 		t.Fatal(err)

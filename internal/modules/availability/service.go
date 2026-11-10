@@ -2,8 +2,9 @@ package availability
 
 import (
 	"context"
-	"pocket-mvp-backend/internal/validate"
 	"time"
+
+	"pocket-mvp-backend/internal/validate"
 
 	"pocket-mvp-backend/internal/appfault"
 )

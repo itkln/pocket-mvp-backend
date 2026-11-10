@@ -20,7 +20,6 @@ import (
 	"pocket-mvp-backend/internal/httpapi"
 	"pocket-mvp-backend/internal/modules/dinein"
 	"pocket-mvp-backend/internal/modules/identity"
-	"pocket-mvp-backend/internal/security"
 )
 
 type venueHistoryIdentity struct {
@@ -38,28 +37,20 @@ func (auth venueHistoryIdentity) Authenticate(_ context.Context, token string) (
 func TestVenueOrderHistoryIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	must := func(err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 	var owner, customerA, customerB, venueID, otherVenue, category, dish string
 	for index, target := range []*string{&owner, &customerA, &customerB} {
-		must(db.QueryRow(ctx, `INSERT INTO users(email,password_hash,first_name,last_name) VALUES($1,'test','History','Guest') RETURNING id::text`, []string{"history-owner@example.test", "history-a@example.test", "history-b@example.test"}[index]).Scan(target))
+		*target = seedUser(t, db, []string{"history-owner@example.test", "history-a@example.test", "history-b@example.test"}[index], "")
 	}
 	for index, target := range []*string{&venueID, &otherVenue} {
-		must(db.QueryRow(ctx, `INSERT INTO venues(owner_user_id,slug,name,address_line1,city,country_code,status,settings)
-		 VALUES($1,$2,'History Bistro','Main 1','Bratislava','SK','active','{"floor_plan":[{"name":"Main","tables":[{"id":"1","seats":4},{"id":"5","seats":4}]}]}') RETURNING id::text`, owner, []string{"history-main", "history-other"}[index]).Scan(target))
+		*target = seedVenue(t, db, owner, venueSeed{Slug: []string{"history-main", "history-other"}[index], Name: "History Bistro", Settings: `{"floor_plan":[{"name":"Main","tables":[{"id":"1","seats":4},{"id":"5","seats":4}]}]}`})
 	}
-	must(db.QueryRow(ctx, `INSERT INTO menu_categories(venue_id,name) VALUES($1,'Food') RETURNING id::text`, venueID).Scan(&category))
-	must(db.QueryRow(ctx, `INSERT INTO menu_items(venue_id,category_id,name,price_minor) VALUES($1,$2,'Pasta',1200) RETURNING id::text`, venueID, category).Scan(&dish))
-	protector, err := security.NewDataProtector(bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32))
-	must(err)
+	must(t, db.QueryRow(ctx, `INSERT INTO menu_categories(venue_id,name) VALUES($1,'Food') RETURNING id::text`, venueID).Scan(&category))
+	must(t, db.QueryRow(ctx, `INSERT INTO menu_items(venue_id,category_id,name,price_minor) VALUES($1,$2,'Pasta',1200) RETURNING id::text`, venueID, category).Scan(&dish))
+	protector := testProtector(t)
 	service := dinein.NewService(dinein.NewPostgresRepository(db), access.NewVenueAuthorizer(db), protector, "http://localhost:3001")
 	qr := func(venue, table string, rotate bool) string {
 		result, err := service.OwnerQRCode(ctx, owner, venue, table, rotate)
-		must(err)
+		must(t, err)
 		return result.URL[strings.LastIndex(result.URL, "/")+1:]
 	}
 	token1, token5 := qr(venueID, "1", false), qr(venueID, "5", false)
@@ -67,7 +58,7 @@ func TestVenueOrderHistoryIntegration(t *testing.T) {
 	deviceB := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{4}, 32))
 	create := func(token, key, device, customer string) dinein.Order {
 		order, err := service.Create(ctx, dinein.CreateInput{Token: token, IdempotencyKey: key, GuestToken: device, CustomerUserID: customer, Notes: "No onions", Items: []dinein.ItemInput{{MenuItemID: dish, Quantity: 2, ExpectedPriceMinor: 1200}}})
-		must(err)
+		must(t, err)
 		return order
 	}
 	first := create(token1, "history-device-a-first", deviceA, "")
@@ -81,7 +72,7 @@ func TestVenueOrderHistoryIntegration(t *testing.T) {
 	}
 	history := func(input dinein.HistoryInput) dinein.HistoryPage {
 		page, err := service.History(ctx, input)
-		must(err)
+		must(t, err)
 		return page
 	}
 	input := dinein.HistoryInput{VenueID: venueID, GuestToken: deviceA, LegacyKeys: []string{"history-legacy-revoked", "history-device-b-first", "history-account-b-first"}}
@@ -109,12 +100,12 @@ func TestVenueOrderHistoryIntegration(t *testing.T) {
 		t.Fatal("missing repeat identity or QR snapshot")
 	}
 	var oldTable, newTable, oldBill, newBill string
-	must(db.QueryRow(ctx, `SELECT venue_table_id::text,bill_id::text FROM orders WHERE id=$1`, first.ID).Scan(&oldTable, &oldBill))
-	must(db.QueryRow(ctx, `SELECT id::text FROM venue_tables WHERE venue_id=$1 AND identifier='5'`, venueID).Scan(&newTable))
-	must(db.QueryRow(ctx, `INSERT INTO bills(venue_id,venue_table_id) VALUES($1,$2) RETURNING id::text`, venueID, newTable).Scan(&newBill))
+	must(t, db.QueryRow(ctx, `SELECT venue_table_id::text,bill_id::text FROM orders WHERE id=$1`, first.ID).Scan(&oldTable, &oldBill))
+	must(t, db.QueryRow(ctx, `SELECT id::text FROM venue_tables WHERE venue_id=$1 AND identifier='5'`, venueID).Scan(&newTable))
+	must(t, db.QueryRow(ctx, `INSERT INTO bills(venue_id,venue_table_id) VALUES($1,$2) RETURNING id::text`, venueID, newTable).Scan(&newBill))
 	repeated := create(token5, "history-repeat-current-five", deviceA, "")
 	var orderTable, orderBill string
-	must(db.QueryRow(ctx, `SELECT venue_table_id::text,bill_id::text FROM orders WHERE id=$1`, repeated.ID).Scan(&orderTable, &orderBill))
+	must(t, db.QueryRow(ctx, `SELECT venue_table_id::text,bill_id::text FROM orders WHERE id=$1`, repeated.ID).Scan(&orderTable, &orderBill))
 	if orderTable != newTable || orderTable == oldTable || orderBill != newBill || orderBill == oldBill {
 		t.Fatal("repeat used the old table or bill")
 	}
@@ -127,7 +118,7 @@ func TestVenueOrderHistoryIntegration(t *testing.T) {
 	if _, err := service.Lookup(ctx, token5, "history-repeat-current-five", dinein.HistoryInput{GuestToken: deviceA}); err != nil {
 		t.Fatal(err)
 	}
-	must(func() error {
+	must(t, func() error {
 		_, err := db.Exec(ctx, `UPDATE menu_items SET name='New pasta',price_minor=1500,is_available=false WHERE id=$1`, dish)
 		return err
 	}())
@@ -163,7 +154,7 @@ func TestVenueOrderHistoryIntegration(t *testing.T) {
 	}
 	response = call("/api/v1/public/table-orders/history", map[string]any{"venue_id": venueID}, cookies[0])
 	var empty dinein.HistoryPage
-	must(json.Unmarshal(response.Body.Bytes(), &empty))
+	must(t, json.Unmarshal(response.Body.Bytes(), &empty))
 	if len(empty.Orders) != 0 {
 		t.Fatal("QR holder can read another device's history")
 	}
@@ -173,7 +164,7 @@ func TestVenueOrderHistoryIntegration(t *testing.T) {
 	}
 	response = call("/api/v1/public/table-orders/history", map[string]any{"venue_id": venueID}, &http.Cookie{Name: "session", Value: "valid-account-session"})
 	var accountPage dinein.HistoryPage
-	must(json.Unmarshal(response.Body.Bytes(), &accountPage))
+	must(t, json.Unmarshal(response.Body.Bytes(), &accountPage))
 	if response.Code != 200 || accountPage.Scope != "account" || len(accountPage.Orders) != 1 || accountPage.Orders[0].ID != accountA.ID {
 		t.Fatal("HTTP session did not select its own account history")
 	}
@@ -185,9 +176,9 @@ func TestVenueOrderHistoryIntegration(t *testing.T) {
 	deviceC := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{5}, 32))
 	sum := sha256.Sum256([]byte(deviceC))
 	hash := hex.EncodeToString(sum[:])
-	_, err = db.Exec(ctx, `INSERT INTO orders(venue_id,venue_table_id,channel,currency,guest_history_hash,created_at)
+	_, err := db.Exec(ctx, `INSERT INTO orders(venue_id,venue_table_id,channel,currency,guest_history_hash,created_at)
 	 SELECT $1,$2,'dine_in','EUR',$3,'2026-01-01'::timestamptz FROM generate_series(1,35)`, venueID, newTable, hash)
-	must(err)
+	must(t, err)
 	page = history(dinein.HistoryInput{VenueID: venueID, GuestToken: deviceC})
 	if len(page.Orders) != 30 || page.NextCursor == "" {
 		t.Fatal("missing history pagination")

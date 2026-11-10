@@ -2,8 +2,9 @@ package dinein
 
 import (
 	"context"
-	"pocket-mvp-backend/internal/money"
 	"time"
+
+	"pocket-mvp-backend/internal/money"
 )
 
 // Bill is the current table visit. No guest identities or private order notes

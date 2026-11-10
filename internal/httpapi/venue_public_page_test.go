@@ -6,10 +6,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"pocket-mvp-backend/internal/appfault"
-	"pocket-mvp-backend/internal/modules/venues"
 	"strings"
 	"testing"
+
+	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/modules/venues"
 )
 
 type publicPageVenues struct {

@@ -3,9 +3,11 @@ package ordering
 import (
 	"context"
 	"errors"
-	"github.com/jackc/pgx/v5"
-	"pocket-mvp-backend/internal/appfault"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
+
+	"pocket-mvp-backend/internal/appfault"
 )
 
 // One query for the page, one batched query for its item snapshots, independent of page size.

@@ -15,16 +15,8 @@ import (
 func TestPublicMenuIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	var ownerID, venueID string
-	if err := db.QueryRow(ctx, `INSERT INTO users (email, password_hash, first_name, last_name, account_role)
-		VALUES ('menu-owner@example.test', 'test-only', 'Menu', 'Owner', 'venue_owner') RETURNING id::text`).Scan(&ownerID); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.QueryRow(ctx, `INSERT INTO venues (owner_user_id, slug, name, address_line1, city,
-		country_code, timezone, currency, status) VALUES ($1, 'menu-test-venue', 'Menu Test',
-		'Main 1', 'Bratislava', 'SK', 'Europe/Bratislava', 'EUR', 'active') RETURNING id::text`, ownerID).Scan(&venueID); err != nil {
-		t.Fatal(err)
-	}
+	ownerID := seedUser(t, db, "menu-owner@example.test", "venue_owner")
+	venueID := seedVenue(t, db, ownerID, venueSeed{Slug: "menu-test-venue", Name: "Menu Test"})
 	owner := catalog.NewService(catalog.NewPostgresRepository(db), access.NewVenueAuthorizer(db))
 	dish := venues.NewService(venues.NewPostgresRepository(db), access.NewVenueAuthorizer(db))
 	preorderDisabled := false

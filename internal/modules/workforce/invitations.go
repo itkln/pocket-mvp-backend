@@ -3,11 +3,12 @@ package workforce
 import (
 	"context"
 	"net/url"
+	"strings"
+	"time"
+
 	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/security"
-	"strings"
-	"time"
 )
 
 type Invitation struct {

@@ -1,39 +1,28 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http/httptest"
-	"pocket-mvp-backend/internal/access"
-	"pocket-mvp-backend/internal/httpapi"
-	"pocket-mvp-backend/internal/modules/dinein"
-	"pocket-mvp-backend/internal/security"
 	"strings"
 	"sync"
 	"testing"
+
+	"pocket-mvp-backend/internal/access"
+	"pocket-mvp-backend/internal/httpapi"
+	"pocket-mvp-backend/internal/modules/dinein"
 )
 
 func TestTableVisitIntegration(t *testing.T) {
-	must := func(t *testing.T, err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	var ownerID, venueID, categoryID, itemID string
-	must(t, db.QueryRow(ctx, `INSERT INTO users(email,password_hash,first_name,last_name,account_role) VALUES('qr-owner@example.test','test','QR','Owner','venue_owner') RETURNING id::text`).Scan(&ownerID))
-	must(t, db.QueryRow(ctx, `INSERT INTO venues(owner_user_id,slug,name,address_line1,city,country_code,status,settings)
-  VALUES($1,'qr-test','QR Test','Main 1','Bratislava','SK','active','{"floor_plan":[{"id":"floor-1","name":"Main","tables":[{"id":"07","seats":4,"x":12,"y":30}]}]}') RETURNING id::text`, ownerID).Scan(&venueID))
-	must(t, db.QueryRow(ctx, `INSERT INTO menu_categories(venue_id,name,preorder_enabled) VALUES($1,'Food',false) RETURNING id::text`, venueID).Scan(&categoryID))
-	must(t, db.QueryRow(ctx, `INSERT INTO menu_items(venue_id,category_id,name,price_minor) VALUES($1,$2,'Pasta',1200) RETURNING id::text`, venueID, categoryID).Scan(&itemID))
-	protector, err := security.NewDataProtector(bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32))
-	must(t, err)
+	ownerID := seedUser(t, db, "qr-owner@example.test", "venue_owner")
+	venueID := seedVenue(t, db, ownerID, venueSeed{Slug: "qr-test", Name: "QR Test", Settings: `{"floor_plan":[{"id":"floor-1","name":"Main","tables":[{"id":"07","seats":4,"x":12,"y":30}]}]}`})
+	_, itemID := seedMenuItem(t, db, venueID, "Food", false, "Pasta", 1200)
+	protector := testProtector(t)
 	service := dinein.NewService(dinein.NewPostgresRepository(db), access.NewVenueAuthorizer(db), protector, "http://localhost:3001")
 	qr, err := service.OwnerQRCode(ctx, ownerID, venueID, "07", false)
 	must(t, err)

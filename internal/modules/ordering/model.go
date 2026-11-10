@@ -1,8 +1,9 @@
 package ordering
 
 import (
-	"pocket-mvp-backend/internal/money"
 	"time"
+
+	"pocket-mvp-backend/internal/money"
 )
 
 type StatusEvent struct {

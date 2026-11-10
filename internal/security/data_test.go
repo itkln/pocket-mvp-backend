@@ -84,7 +84,8 @@ func TestSessionTokenIsRandomAndHasStableHash(t *testing.T) {
 	if first == second || len(first) < 40 {
 		t.Fatal("session tokens need sufficient random entropy")
 	}
-	if HashSessionToken(first) != HashSessionToken(first) || HashSessionToken(first) == first {
+	hash := HashSessionToken(first)
+	if hash != HashSessionToken(first) || hash == first {
 		t.Fatal("session hash must be deterministic and must not expose token")
 	}
 }

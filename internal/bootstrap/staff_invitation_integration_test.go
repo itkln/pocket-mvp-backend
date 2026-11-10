@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"pocket-mvp-backend/internal/config"
-	"pocket-mvp-backend/internal/security"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"pocket-mvp-backend/internal/config"
+	"pocket-mvp-backend/internal/security"
 )
 
 func TestStaffInvitationIntegration(t *testing.T) {
@@ -61,11 +62,7 @@ func TestStaffInvitationIntegration(t *testing.T) {
 	ownerID, owner := register("invite-owner@example.com")
 	staffID, staff := register("invite-kitchen@example.com")
 	_, other := register("invite-other@example.com")
-	var venue string
-	err = db.QueryRow(ctx, `INSERT INTO venues(owner_user_id,name,slug,address_line1,city,country_code,currency,timezone,status) VALUES($1,'Invite Venue','invite-test','Test 1','Bratislava','SK','EUR','Europe/Bratislava','active') RETURNING id::text`, ownerID).Scan(&venue)
-	if err != nil {
-		t.Fatal(err)
-	}
+	venue := seedVenue(t, db, ownerID, venueSeed{Slug: "invite-test", Name: "Invite Venue"})
 	base := "/venues/" + venue + "/team"
 	create := func() *httptest.ResponseRecorder {
 		return call("POST", base, `{"display_name":"Waiter","email":"invite-kitchen@example.com","role":"waiter"}`, owner)

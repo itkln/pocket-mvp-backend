@@ -3,8 +3,9 @@ package demodata
 import (
 	"context"
 	"fmt"
-	"pocket-mvp-backend/internal/money"
 	"time"
+
+	"pocket-mvp-backend/internal/money"
 
 	"github.com/jackc/pgx/v5"
 )

@@ -1,8 +1,9 @@
 package demodata
 
 import (
-	"pocket-mvp-backend/internal/money"
 	"time"
+
+	"pocket-mvp-backend/internal/money"
 )
 
 const (

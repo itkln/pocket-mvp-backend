@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
 	"pocket-mvp-backend/internal/appfault"
 )
 

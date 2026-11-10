@@ -213,8 +213,16 @@ published reviews for an active venue. The public review view omits guest names,
 order IDs and table identifiers; the response contains only rating, body,
 owner reply and creation time.
 
-## Tests
+## Tests and lint
+
+Everything runs in Docker; no local Go or linter is needed.
 
 ```bash
-go test ./...
+make test              # go vet + unit tests; tests that need PostgreSQL skip themselves
+make test-integration  # all tests against a throwaway PostgreSQL (scripts/test-integration.sh)
+make lint              # golangci-lint v1.61 with .golangci.yml
 ```
+
+CI (`.github/workflows/ci.yml`) runs `make lint`'s checks and `scripts/test-integration.sh` on every
+pull request and on `main`. Integration tests get a fresh schema with every migration from
+`resetTestDatabase` and build their rows with the helpers in `internal/bootstrap/fixtures_test.go`.

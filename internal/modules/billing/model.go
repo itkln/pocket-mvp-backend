@@ -1,8 +1,9 @@
 package billing
 
 import (
-	"pocket-mvp-backend/internal/money"
 	"time"
+
+	"pocket-mvp-backend/internal/money"
 )
 
 type Payment struct {

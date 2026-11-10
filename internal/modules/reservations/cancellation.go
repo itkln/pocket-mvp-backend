@@ -2,9 +2,10 @@ package reservations
 
 import (
 	"encoding/json"
+	"time"
+
 	"pocket-mvp-backend/internal/lifecycle"
 	"pocket-mvp-backend/internal/validate"
-	"time"
 )
 
 // Cancellation is computed by the server and checked again under row locks.

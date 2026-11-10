@@ -8,39 +8,31 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
 	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/httpapi"
 	"pocket-mvp-backend/internal/modules/ordering"
 	"pocket-mvp-backend/internal/modules/venues"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestOrderPolicyIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	must := func(err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 	user := func(name string) string {
-		var id string
-		must(db.QueryRow(ctx, `INSERT INTO users(email,password_hash,first_name,last_name,account_role) VALUES($1,'test','Test','User','venue_owner') RETURNING id::text`, name+"@policy.test").Scan(&id))
+		id := seedUser(t, db, name+"@policy.test", "venue_owner")
 		return id
 	}
 	owner := user("owner")
-	var venue string
-	must(db.QueryRow(ctx, `INSERT INTO venues(owner_user_id,slug,name,address_line1,city,country_code,timezone,currency,status) VALUES($1,'policy','Policy','Main','Bratislava','SK','Europe/Bratislava','EUR','active') RETURNING id::text`, owner).Scan(&venue))
+	venue := seedVenue(t, db, owner, venueSeed{Slug: "policy", Name: "Policy"})
 	actors := map[string]string{"owner": owner, "outsider": user("outsider")}
 	for _, role := range []string{"manager", "waiter"} {
 		id := user(role)
 		actors[role] = id
-		_, err := db.Exec(ctx, `INSERT INTO venue_staff(venue_id,user_id,invited_email,role,status,invited_by_user_id) VALUES($1,$2,$3,$4,'active',$5)`, venue, id, role+"@policy.test", role, owner)
-		must(err)
+		seedStaff(t, db, venue, id, role+"@policy.test", role, owner)
 	}
 	// The kitchen and viewer roles no longer exist (V-SRV-01).
 	for _, role := range []string{"kitchen", "viewer"} {
@@ -51,7 +43,7 @@ func TestOrderPolicyIntegration(t *testing.T) {
 	workplaces := venues.NewPostgresRepository(db)
 	for role, actor := range actors {
 		listed, err := workplaces.ListWorkplaces(ctx, actor)
-		must(err)
+		must(t, err)
 		if role == "outsider" {
 			if len(listed) != 0 {
 				t.Fatal("outsider sees workplace")
@@ -66,16 +58,16 @@ func TestOrderPolicyIntegration(t *testing.T) {
 	svc := ordering.NewService(repo, access.NewVenueAuthorizer(db))
 	create := func() string {
 		var id string
-		must(db.QueryRow(ctx, `INSERT INTO orders(venue_id,channel,guest_name,total_minor) VALUES($1,'dine_in','PRIVATE',1200) RETURNING id::text`, venue).Scan(&id))
+		must(t, db.QueryRow(ctx, `INSERT INTO orders(venue_id,channel,guest_name,total_minor) VALUES($1,'dine_in','PRIVATE',1200) RETURNING id::text`, venue).Scan(&id))
 		_, err := db.Exec(ctx, `INSERT INTO order_items(order_id,item_name,quantity,unit_price_minor,total_minor) VALUES($1,'Soup',1,1200,1200)`, id)
-		must(err)
+		must(t, err)
 		return id
 	}
 	id := create()
 	var bill string
-	must(db.QueryRow(ctx, `INSERT INTO bills(venue_id,subtotal_minor,total_minor) VALUES($1,1200,1200) RETURNING id::text`, venue).Scan(&bill))
+	must(t, db.QueryRow(ctx, `INSERT INTO bills(venue_id,subtotal_minor,total_minor) VALUES($1,1200,1200) RETURNING id::text`, venue).Scan(&bill))
 	_, err := db.Exec(ctx, `UPDATE orders SET bill_id=$1 WHERE id=$2`, bill, id)
-	must(err)
+	must(t, err)
 	if _, err := svc.List(ctx, actors["outsider"], venue); !errors.Is(err, appfault.ErrNotFound) {
 		t.Fatal(err)
 	}
@@ -86,7 +78,7 @@ func TestOrderPolicyIntegration(t *testing.T) {
 		t.Fatal("removed accepted status still settable", err)
 	}
 	_, err = svc.UpdateStatus(ctx, actors["waiter"], venue, id, "preparing", "new")
-	must(err)
+	must(t, err)
 	var conflict *ordering.StatusConflict
 	_, err = svc.UpdateStatus(ctx, owner, venue, id, "cancelled", "new", ordering.StatusChange{Reason: "guest_request"})
 	if !errors.As(err, &conflict) || conflict.CurrentStatus != "preparing" {
@@ -94,20 +86,20 @@ func TestOrderPolicyIntegration(t *testing.T) {
 	}
 	for _, step := range []struct{ role, from, to string }{{"waiter", "preparing", "served"}, {"manager", "served", "completed"}} {
 		_, err = svc.UpdateStatus(ctx, actors[step.role], venue, id, step.to, step.from)
-		must(err)
+		must(t, err)
 		var billStatus string
 		var subtotal, total, payments int
 		var closed *time.Time
-		must(db.QueryRow(ctx, `SELECT status,subtotal_minor,total_minor,closed_at,(SELECT count(*) FROM payments WHERE bill_id=$1) FROM bills WHERE id=$1`, bill).Scan(&billStatus, &subtotal, &total, &closed, &payments))
+		must(t, db.QueryRow(ctx, `SELECT status,subtotal_minor,total_minor,closed_at,(SELECT count(*) FROM payments WHERE bill_id=$1) FROM bills WHERE id=$1`, bill).Scan(&billStatus, &subtotal, &total, &closed, &payments))
 		if billStatus != "open" || subtotal != 1200 || total != 1200 || closed != nil || payments != 0 {
 			t.Fatalf("service action changed bill: %s %d %d %v %d", billStatus, subtotal, total, closed, payments)
 		}
 	}
 	var before, after time.Time
-	must(db.QueryRow(ctx, `SELECT updated_at FROM orders WHERE id=$1`, id).Scan(&before))
+	must(t, db.QueryRow(ctx, `SELECT updated_at FROM orders WHERE id=$1`, id).Scan(&before))
 	_, err = svc.UpdateStatus(ctx, owner, venue, id, "completed", "served")
-	must(err)
-	must(db.QueryRow(ctx, `SELECT updated_at FROM orders WHERE id=$1`, id).Scan(&after))
+	must(t, err)
+	must(t, db.QueryRow(ctx, `SELECT updated_at FROM orders WHERE id=$1`, id).Scan(&after))
 	if !before.Equal(after) {
 		t.Fatal("replay wrote order")
 	}
@@ -168,9 +160,9 @@ func TestOrderPolicyIntegration(t *testing.T) {
 			t.Fatalf("waiter cancellation: %v", err)
 		}
 		var bid string
-		must(db.QueryRow(ctx, `INSERT INTO bills(venue_id,subtotal_minor,tip_minor,total_minor) VALUES($1,1200,100,1300) RETURNING id::text`, venue).Scan(&bid))
+		must(t, db.QueryRow(ctx, `INSERT INTO bills(venue_id,subtotal_minor,tip_minor,total_minor) VALUES($1,1200,100,1300) RETURNING id::text`, venue).Scan(&bid))
 		_, err := db.Exec(ctx, `UPDATE orders SET bill_id=$1,subtotal_minor=1200,tip_minor=100,total_minor=1300 WHERE id=$2`, bid, oid)
-		must(err)
+		must(t, err)
 		start := make(chan struct{})
 		results := make(chan error, 2)
 		for n := 0; n < 2; n++ {
@@ -181,15 +173,15 @@ func TestOrderPolicyIntegration(t *testing.T) {
 			}()
 		}
 		close(start)
-		must(<-results)
-		must(<-results)
+		must(t, <-results)
+		must(t, <-results)
 		var total int
-		must(db.QueryRow(ctx, `SELECT total_minor FROM bills WHERE id=$1`, bid).Scan(&total))
+		must(t, db.QueryRow(ctx, `SELECT total_minor FROM bills WHERE id=$1`, bid).Scan(&total))
 		if total != 0 {
 			t.Fatal(total)
 		}
 		detail, err := svc.Get(ctx, owner, venue, oid)
-		must(err)
+		must(t, err)
 		if len(detail.StatusEvents) != 1 || detail.StatusEvents[0].ActorID != owner || detail.StatusEvents[0].Reason != "guest_request" || detail.StatusEvents[0].Comment != "Гость передумал" || detail.StatusEvents[0].PreviousStatus != "new" {
 			t.Fatalf("audit: %+v", detail.StatusEvents)
 		}
@@ -198,14 +190,14 @@ func TestOrderPolicyIntegration(t *testing.T) {
 		}
 		protected := create()
 		_, err = db.Exec(ctx, `UPDATE orders SET bill_id=$1 WHERE id=$2`, bill, protected)
-		must(err)
+		must(t, err)
 		_, err = db.Exec(ctx, `UPDATE bills SET status='paid' WHERE id=$1`, bill)
-		must(err)
+		must(t, err)
 		if _, err := svc.UpdateStatus(ctx, owner, venue, protected, "cancelled", "new", change); !errors.Is(err, appfault.ErrConflict) {
 			t.Fatalf("closed bill: %v", err)
 		}
 		protectedDetail, err := svc.Get(ctx, owner, venue, protected)
-		must(err)
+		must(t, err)
 		if len(protectedDetail.StatusEvents) != 0 || protectedDetail.CancellationBlocked == "" {
 			t.Fatalf("blocked audit %+v", protectedDetail)
 		}
@@ -231,21 +223,21 @@ func TestOrderPolicyIntegration(t *testing.T) {
 		}
 	}
 	_, err = db.Exec(ctx, `UPDATE venue_staff SET status='inactive' WHERE user_id=$1`, actors["waiter"])
-	must(err)
+	must(t, err)
 	listed, err := workplaces.ListWorkplaces(ctx, actors["waiter"])
-	must(err)
+	must(t, err)
 	if len(listed) != 0 {
 		t.Fatal("inactive membership visible")
 	}
 	_, err = db.Exec(ctx, `UPDATE venue_staff SET status='active',removed_at=now() WHERE user_id=$1`, actors["waiter"])
-	must(err)
+	must(t, err)
 	listed, err = workplaces.ListWorkplaces(ctx, actors["waiter"])
-	must(err)
+	must(t, err)
 	if len(listed) != 0 {
 		t.Fatal("removed membership visible")
 	}
 	caps, err := access.NewCapabilityReader(db).ListCapabilities(ctx, actors["waiter"])
-	must(err)
+	must(t, err)
 	for _, capability := range caps {
 		if capability == "staff" {
 			t.Fatal("removed membership has staff capability")

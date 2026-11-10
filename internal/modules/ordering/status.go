@@ -1,8 +1,9 @@
 package ordering
 
 import (
-	"pocket-mvp-backend/internal/lifecycle"
 	"strings"
+
+	"pocket-mvp-backend/internal/lifecycle"
 
 	"pocket-mvp-backend/internal/access"
 )

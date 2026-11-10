@@ -12,17 +12,9 @@ import (
 func TestPublicAvailabilityIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	var ownerID, venueID, layoutID, tableID string
-	if err := db.QueryRow(ctx, `INSERT INTO users (email, password_hash, first_name, last_name, account_role)
-		VALUES ('availability-owner@example.test', 'test-only', 'Test', 'Owner', 'venue_owner') RETURNING id::text`).Scan(&ownerID); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.QueryRow(ctx, `INSERT INTO venues (owner_user_id, slug, name, address_line1, city,
-		country_code, timezone, currency, status, settings) VALUES ($1, 'availability-test', 'Availability Test',
-		'Main 1', 'Bratislava', 'SK', 'Europe/Bratislava', 'EUR', 'active',
-		'{"schedule_enabled":true,"same_day_booking":true,"public_category":"restaurants"}') RETURNING id::text`, ownerID).Scan(&venueID); err != nil {
-		t.Fatal(err)
-	}
+	var layoutID, tableID string
+	ownerID := seedUser(t, db, "availability-owner@example.test", "venue_owner")
+	venueID := seedVenue(t, db, ownerID, venueSeed{Slug: "availability-test", Name: "Availability Test", Settings: `{"schedule_enabled":true,"same_day_booking":true,"public_category":"restaurants"}`})
 	if err := db.QueryRow(ctx, `INSERT INTO venue_layouts (venue_id, name) VALUES ($1, 'Main') RETURNING id::text`, venueID).Scan(&layoutID); err != nil {
 		t.Fatal(err)
 	}

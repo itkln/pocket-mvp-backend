@@ -5,11 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"pocket-mvp-backend/internal/appfault"
-	"pocket-mvp-backend/internal/validate"
 	"sort"
 	"strings"
 	"time"
+
+	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/validate"
 )
 
 type Query struct {

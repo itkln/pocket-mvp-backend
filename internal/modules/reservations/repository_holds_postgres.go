@@ -3,11 +3,13 @@ package reservations
 import (
 	"context"
 	"errors"
-	"pocket-mvp-backend/internal/lifecycle"
 	"time"
+
+	"pocket-mvp-backend/internal/lifecycle"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/gratuity"
 )

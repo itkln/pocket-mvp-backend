@@ -1,0 +1,30 @@
+# golangci-lint v1.61. Run with `make lint` (Docker, no local install needed).
+run:
+  timeout: 5m
+linters:
+  disable-all: true
+  enable:
+    - errcheck      # unchecked errors
+    - govet
+    - staticcheck   # bugs, simplifications, deprecated APIs
+    - gosimple
+    - unused
+    - ineffassign
+    - bodyclose
+    - gofmt
+    - goimports
+    - misspell
+linters-settings:
+  goimports:
+    local-prefixes: pocket-mvp-backend
+  errcheck:
+    exclude-functions:
+      # Rollback after a commit returns ErrTxClosed by design; the deferred call only cleans up.
+      - (github.com/jackc/pgx/v5.Tx).Rollback
+issues:
+  exclude-rules:
+    # httptest.ResponseRecorder.Result() bodies are in-memory buffers.
+    - path: _test\.go
+      linters: [bodyclose]
+  max-issues-per-linter: 0
+  max-same-issues: 0

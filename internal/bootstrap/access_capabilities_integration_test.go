@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,7 +14,6 @@ import (
 	"pocket-mvp-backend/internal/modules/floorplan"
 	"pocket-mvp-backend/internal/modules/venues"
 	"pocket-mvp-backend/internal/modules/workforce"
-	"pocket-mvp-backend/internal/security"
 )
 
 // V-BE-02: managers run the menu, the floor (plan and table QR codes) and the venue settings
@@ -24,29 +22,19 @@ import (
 func TestVenueCapabilitiesIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	must := func(err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 	user := func(name string) string {
-		var id string
-		must(db.QueryRow(ctx, `INSERT INTO users(email,password_hash,first_name,last_name,account_role) VALUES($1,'x','Test','User','customer') RETURNING id::text`, name+"@capabilities.test").Scan(&id))
+		id := seedUser(t, db, name+"@capabilities.test", "customer")
 		return id
 	}
 	owner := user("owner")
-	var venue string
-	must(db.QueryRow(ctx, `INSERT INTO venues(owner_user_id,slug,name,address_line1,city,country_code,timezone,currency,status) VALUES($1,'capabilities','Capabilities','Main','Bratislava','SK','Europe/Bratislava','EUR','active') RETURNING id::text`, owner).Scan(&venue))
+	venue := seedVenue(t, db, owner, venueSeed{Slug: "capabilities", Name: "Capabilities"})
 	actors := map[string]string{"owner": owner, "outsider": user("outsider")}
 	for _, role := range []string{"manager", "waiter"} {
 		actors[role] = user(role)
-		_, err := db.Exec(ctx, `INSERT INTO venue_staff(venue_id,user_id,invited_email,role,status,invited_by_user_id) VALUES($1,$2,$3,$4,'active',$5)`, venue, actors[role], role+"@capabilities.test", role, owner)
-		must(err)
+		seedStaff(t, db, venue, actors[role], role+"@capabilities.test", role, owner)
 	}
 	authorizer := access.NewVenueAuthorizer(db)
-	protector, err := security.NewDataProtector(bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32))
-	must(err)
+	protector := testProtector(t)
 	menu := catalog.NewService(catalog.NewPostgresRepository(db), authorizer)
 	floor := floorplan.NewService(floorplan.NewPostgresRepository(db), authorizer)
 	tables := dinein.NewService(dinein.NewPostgresRepository(db), authorizer, protector, "https://dish.example")
@@ -115,7 +103,7 @@ func TestVenueCapabilitiesIntegration(t *testing.T) {
 	// The workplace list carries the full profile only for those who edit it.
 	for actor, full := range map[string]bool{"owner": true, "manager": true, "waiter": false} {
 		places, err := profile.ListWorkplaces(ctx, actors[actor])
-		must(err)
+		must(t, err)
 		if len(places) != 1 {
 			t.Fatalf("%s workplaces: %v", actor, places)
 		}
@@ -129,10 +117,10 @@ func TestVenueCapabilitiesIntegration(t *testing.T) {
 		t.Fatalf("manager deleted the venue: %v", err)
 	}
 	// A manager whose membership ends loses the menu at once.
-	_, err = db.Exec(ctx, `UPDATE venue_staff SET status='inactive' WHERE user_id=$1`, actors["manager"])
-	must(err)
+	_, err := db.Exec(ctx, `UPDATE venue_staff SET status='inactive' WHERE user_id=$1`, actors["manager"])
+	must(t, err)
 	if err := checks["menu"](actors["manager"]); !errors.Is(err, appfault.ErrNotFound) {
 		t.Fatalf("inactive manager kept the menu: %v", err)
 	}
-	must(profile.Delete(ctx, owner, venue))
+	must(t, profile.Delete(ctx, owner, venue))
 }

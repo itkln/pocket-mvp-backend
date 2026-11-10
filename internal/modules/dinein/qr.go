@@ -4,9 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"strings"
+
 	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
-	"strings"
 )
 
 func (s *Service) OwnerQRCode(ctx context.Context, userID, venueID, identifier string, rotate bool) (QRCode, error) {

@@ -2,10 +2,11 @@ package ordering
 
 import (
 	"context"
-	"pocket-mvp-backend/internal/lifecycle"
-	"pocket-mvp-backend/internal/validate"
 	"strings"
 	"unicode/utf8"
+
+	"pocket-mvp-backend/internal/lifecycle"
+	"pocket-mvp-backend/internal/validate"
 
 	"pocket-mvp-backend/internal/appfault"
 )

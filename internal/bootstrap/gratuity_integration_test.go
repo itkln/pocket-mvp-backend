@@ -1,14 +1,14 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"pocket-mvp-backend/internal/money"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"pocket-mvp-backend/internal/money"
 
 	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/appfault"
@@ -16,7 +16,6 @@ import (
 	"pocket-mvp-backend/internal/modules/dinein"
 	"pocket-mvp-backend/internal/modules/ordering"
 	"pocket-mvp-backend/internal/modules/reservations"
-	"pocket-mvp-backend/internal/security"
 )
 
 type tipTestAvailability struct{ tableID string }
@@ -28,29 +27,19 @@ func (a tipTestAvailability) FindSlot(_ context.Context, _ string, start time.Ti
 func TestGratuityIntegration(t *testing.T) {
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	must := func(err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	var ownerID, venueID, categoryID, itemID string
-	must(db.QueryRow(ctx, `INSERT INTO users(email,password_hash,first_name,last_name,account_role) VALUES('tips@example.test','test','Tips','Owner','venue_owner') RETURNING id::text`).Scan(&ownerID))
-	must(db.QueryRow(ctx, `INSERT INTO venues(owner_user_id,slug,name,address_line1,city,country_code,status,settings)
- VALUES($1,'tips-test','Tips Test','Main 1','Bratislava','SK','active','{"preorder_enabled":true,"floor_plan":[{"id":"main","name":"Main","tables":[{"id":"07","seats":4,"x":12,"y":30}]}]}') RETURNING id::text`, ownerID).Scan(&venueID))
-	must(db.QueryRow(ctx, `INSERT INTO menu_categories(venue_id,name,preorder_enabled) VALUES($1,'Food',true) RETURNING id::text`, venueID).Scan(&categoryID))
-	must(db.QueryRow(ctx, `INSERT INTO menu_items(venue_id,category_id,name,price_minor) VALUES($1,$2,'Toast',1090) RETURNING id::text`, venueID, categoryID).Scan(&itemID))
-	protector, err := security.NewDataProtector(bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32))
-	must(err)
+	ownerID := seedUser(t, db, "tips@example.test", "venue_owner")
+	venueID := seedVenue(t, db, ownerID, venueSeed{Slug: "tips-test", Name: "Tips Test", Settings: `{"preorder_enabled":true,"floor_plan":[{"id":"main","name":"Main","tables":[{"id":"07","seats":4,"x":12,"y":30}]}]}`})
+	_, itemID := seedMenuItem(t, db, venueID, "Food", true, "Toast", 1090)
+	protector := testProtector(t)
 	service := dinein.NewService(dinein.NewPostgresRepository(db), access.NewVenueAuthorizer(db), protector, "http://localhost:3001")
 	qr, err := service.OwnerQRCode(ctx, ownerID, venueID, "07", false)
-	must(err)
+	must(t, err)
 	token := qr.URL[strings.LastIndex(qr.URL, "/")+1:]
 	expected := money.Minor(1145)
 	input := dinein.CreateInput{Token: token, IdempotencyKey: "e14-percent-order-test", Tip: &gratuity.Selection{Mode: "percent", Percent: 5}, ExpectedTotalMinor: &expected,
 		Items: []dinein.ItemInput{{MenuItemID: itemID, Quantity: 1, ExpectedPriceMinor: 1090}}}
 	created, err := service.Create(ctx, input)
-	must(err)
+	must(t, err)
 	if created.SubtotalMinor != 1090 || created.TipMinor != 55 || created.TotalMinor != 1145 {
 		t.Fatalf("bad receipt: %+v", created)
 	}
@@ -70,16 +59,16 @@ func TestGratuityIntegration(t *testing.T) {
 	wg.Wait()
 	close(errs)
 	for err := range errs {
-		must(err)
+		must(t, err)
 	}
 	var tipCount, tipValue, subtotal, total int
 	var tipStatus, billID string
-	must(db.QueryRow(ctx, `SELECT count(*),COALESCE(sum(amount_minor),0) FROM tips WHERE order_id=$1`, created.ID).Scan(&tipCount, &tipValue))
-	must(db.QueryRow(ctx, `SELECT status FROM tips WHERE order_id=$1`, created.ID).Scan(&tipStatus))
-	must(db.QueryRow(ctx, `SELECT bill_id::text FROM orders WHERE id=$1`, created.ID).Scan(&billID))
+	must(t, db.QueryRow(ctx, `SELECT count(*),COALESCE(sum(amount_minor),0) FROM tips WHERE order_id=$1`, created.ID).Scan(&tipCount, &tipValue))
+	must(t, db.QueryRow(ctx, `SELECT status FROM tips WHERE order_id=$1`, created.ID).Scan(&tipStatus))
+	must(t, db.QueryRow(ctx, `SELECT bill_id::text FROM orders WHERE id=$1`, created.ID).Scan(&billID))
 	checkBill := func(wantBase, wantTip, wantTotal int) {
 		t.Helper()
-		must(db.QueryRow(ctx, `SELECT subtotal_minor,tip_minor,total_minor FROM bills WHERE id=$1`, billID).Scan(&subtotal, &tipValue, &total))
+		must(t, db.QueryRow(ctx, `SELECT subtotal_minor,tip_minor,total_minor FROM bills WHERE id=$1`, billID).Scan(&subtotal, &tipValue, &total))
 		if subtotal != wantBase || tipValue != wantTip || total != wantTotal {
 			t.Fatalf("bill=%d+%d=%d want %d+%d=%d", subtotal, tipValue, total, wantBase, wantTip, wantTotal)
 		}
@@ -89,7 +78,7 @@ func TestGratuityIntegration(t *testing.T) {
 	}
 	checkBill(1090, 55, 1145)
 	lookup, err := service.Lookup(ctx, token, input.IdempotencyKey)
-	must(err)
+	must(t, err)
 	if lookup.TipMinor != 55 || lookup.TotalMinor != 1145 {
 		t.Fatal("lookup lost tips")
 	}
@@ -110,7 +99,7 @@ func TestGratuityIntegration(t *testing.T) {
 	custom.Tip = &gratuity.Selection{Mode: "custom", AmountMinor: 123}
 	custom.ExpectedTotalMinor = nil
 	second, err := service.Create(ctx, custom)
-	must(err)
+	must(t, err)
 	if second.TipMinor != 123 || second.TotalMinor != 1213 {
 		t.Fatalf("custom: %+v", second)
 	}
@@ -119,15 +108,15 @@ func TestGratuityIntegration(t *testing.T) {
 	zero.Tip = &gratuity.Selection{Mode: "none"}
 	zero.ExpectedTotalMinor = nil
 	third, err := service.Create(ctx, zero)
-	must(err)
-	must(db.QueryRow(ctx, `SELECT count(*) FROM tips WHERE order_id=$1`, third.ID).Scan(&tipCount))
+	must(t, err)
+	must(t, db.QueryRow(ctx, `SELECT count(*) FROM tips WHERE order_id=$1`, third.ID).Scan(&tipCount))
 	if tipCount != 0 {
 		t.Fatal("zero tip created a tip record")
 	}
 	checkBill(3270, 178, 3448)
 	// The authoritative menu price is rechecked before accepting the confirmed grand total.
 	_, err = db.Exec(ctx, `UPDATE menu_items SET price_minor=1200 WHERE id=$1`, itemID)
-	must(err)
+	must(t, err)
 	stale := input
 	stale.IdempotencyKey = "e14-stale-price-order-test"
 	if _, err := service.Create(ctx, stale); !errors.Is(err, dinein.ErrPriceChanged) {
@@ -135,13 +124,13 @@ func TestGratuityIntegration(t *testing.T) {
 	}
 	// Retrying a committed order after a menu change still returns the original snapshot.
 	got, err := service.Create(ctx, input)
-	must(err)
+	must(t, err)
 	if got.TotalMinor != 1145 {
 		t.Fatal("retry recalculated committed order")
 	}
 	vendor := ordering.NewPostgresRepository(db)
 	orders, err := vendor.List(ctx, venueID)
-	must(err)
+	must(t, err)
 	found := false
 	for _, o := range orders {
 		if o.ID == created.ID {
@@ -152,22 +141,22 @@ func TestGratuityIntegration(t *testing.T) {
 		t.Fatal("Vendor lost tip breakdown")
 	}
 	_, err = vendor.UpdateStatus(ctx, venueID, created.ID, "cancelled")
-	must(err)
+	must(t, err)
 	_, err = vendor.UpdateStatus(ctx, venueID, created.ID, "cancelled")
-	must(err)
+	must(t, err)
 	checkBill(2180, 123, 2303)
-	must(db.QueryRow(ctx, `SELECT status FROM tips WHERE order_id=$1`, created.ID).Scan(&tipStatus))
+	must(t, db.QueryRow(ctx, `SELECT status FROM tips WHERE order_id=$1`, created.ID).Scan(&tipStatus))
 	if tipStatus != "cancelled" {
 		t.Fatal("cancelled order retained pending tips")
 	}
 	// A bill with an in-progress payment cannot be changed beneath its payment amount.
 	_, err = db.Exec(ctx, `UPDATE bills SET status='payment_pending' WHERE id=$1`, billID)
-	must(err)
+	must(t, err)
 	if _, err := vendor.UpdateStatus(ctx, venueID, second.ID, "cancelled"); !errors.Is(err, appfault.ErrConflict) {
 		t.Fatalf("cancelled locked bill: %v", err)
 	}
 	_, err = db.Exec(ctx, `UPDATE bills SET status='open' WHERE id=$1`, billID)
-	must(err)
+	must(t, err)
 
 	booking := reservations.NewService(reservations.NewPostgresRepository(db), tipTestAvailability{tableID: qr.ID})
 	start := time.Now().Add(48 * time.Hour).Truncate(time.Hour)
@@ -176,35 +165,35 @@ func TestGratuityIntegration(t *testing.T) {
 	grand := money.Minor(1200)
 	reservation.ExpectedTotalMinor = &grand
 	hold, err := booking.Hold(ctx, venueID, reservation)
-	must(err)
+	must(t, err)
 	confirmed, err := booking.Confirm(ctx, venueID, hold.ID, reservation)
-	must(err)
+	must(t, err)
 	if confirmed.PreorderSubtotalMinor != 1200 || confirmed.PreorderTipMinor != 0 || confirmed.PreorderTotalMinor != 1200 {
 		t.Fatalf("preorder receipt: %+v", confirmed)
 	}
 	replay, err := booking.Confirm(ctx, venueID, hold.ID, reservation)
-	must(err)
+	must(t, err)
 	if replay != confirmed {
 		t.Fatalf("preorder retry changed: %+v", replay)
 	}
-	must(db.QueryRow(ctx, `SELECT count(*),COALESCE(sum(t.amount_minor),0) FROM tips t JOIN orders o ON o.id=t.order_id WHERE o.reservation_id=$1`, confirmed.ID).Scan(&tipCount, &tipValue))
+	must(t, db.QueryRow(ctx, `SELECT count(*),COALESCE(sum(t.amount_minor),0) FROM tips t JOIN orders o ON o.id=t.order_id WHERE o.reservation_id=$1`, confirmed.ID).Scan(&tipCount, &tipValue))
 	if tipCount != 0 || tipValue != 0 {
 		t.Fatal("reservation created tips")
 	}
 	customer, err := reservations.NewPostgresRepository(db).ListCustomer(ctx, ownerID)
-	must(err)
+	must(t, err)
 	if len(customer) != 1 || customer[0].PreorderTipMinor != 0 || customer[0].PreorderTotalMinor != 1200 {
 		t.Fatalf("customer receipt: %+v", customer)
 	}
 	var preorderCount int
 	var preorderTip int64
-	must(db.QueryRow(ctx, `SELECT count(*),COALESCE(sum(tip_minor),0) FROM orders WHERE reservation_id=$1 AND channel='preorder'`, confirmed.ID).Scan(&preorderCount, &preorderTip))
+	must(t, db.QueryRow(ctx, `SELECT count(*),COALESCE(sum(tip_minor),0) FROM orders WHERE reservation_id=$1 AND channel='preorder'`, confirmed.ID).Scan(&preorderCount, &preorderTip))
 	if preorderCount != 1 || preorderTip != 0 {
 		t.Fatal("reservation unexpectedly includes tips")
 	}
 	_, err = reservations.NewPostgresRepository(db).CancelCustomer(ctx, ownerID, confirmed.ID)
-	must(err)
-	must(db.QueryRow(ctx, `SELECT count(*) FROM tips t JOIN orders o ON o.id=t.order_id WHERE o.reservation_id=$1`, confirmed.ID).Scan(&tipCount))
+	must(t, err)
+	must(t, db.QueryRow(ctx, `SELECT count(*) FROM tips t JOIN orders o ON o.id=t.order_id WHERE o.reservation_id=$1`, confirmed.ID).Scan(&tipCount))
 	if tipCount != 0 {
 		t.Fatal("cancelled reservation has tips")
 	}
@@ -214,13 +203,13 @@ func TestGratuityIntegration(t *testing.T) {
 	reservation.Tip = &gratuity.Selection{Mode: "none"}
 	grand = 1200
 	direct, err := booking.Create(ctx, venueID, reservation)
-	must(err)
+	must(t, err)
 	if direct.PreorderTipMinor != 0 || direct.PreorderTotalMinor != 1200 {
 		t.Fatalf("direct preorder: %+v", direct)
 	}
 	_, err = booking.Create(ctx, venueID, reservation)
-	must(err)
-	must(db.QueryRow(ctx, `SELECT count(*) FROM tips t JOIN orders o ON o.id=t.order_id WHERE o.reservation_id=$1`, direct.ID).Scan(&tipCount))
+	must(t, err)
+	must(t, db.QueryRow(ctx, `SELECT count(*) FROM tips t JOIN orders o ON o.id=t.order_id WHERE o.reservation_id=$1`, direct.ID).Scan(&tipCount))
 	if tipCount != 0 {
 		t.Fatal("direct reservation created tips")
 	}

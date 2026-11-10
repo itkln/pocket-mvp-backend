@@ -3,15 +3,14 @@ package workforce
 import (
 	"context"
 	"net/mail"
+	"strings"
+
 	"pocket-mvp-backend/internal/access"
 	"pocket-mvp-backend/internal/lifecycle"
 	"pocket-mvp-backend/internal/validate"
-	"strings"
 
 	"pocket-mvp-backend/internal/appfault"
 )
-
-var ()
 
 type VenueAuthorizer interface {
 	Require(context.Context, string, string, access.Capability) error

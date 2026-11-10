@@ -4,38 +4,33 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"pocket-mvp-backend/internal/money"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"pocket-mvp-backend/internal/money"
+
 	"pocket-mvp-backend/internal/modules/reservations"
 	"pocket-mvp-backend/internal/orderstore"
+
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func orderstoreFixture(t *testing.T) (*pgxpool.Pool, string, string, string, []reservations.PreorderItem) {
 	t.Helper()
 	db := resetTestDatabase(t)
 	ctx := context.Background()
-	var owner, venue, category, layout, table string
-	must := func(err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	must(db.QueryRow(ctx, `INSERT INTO users(email,password_hash,first_name,last_name) VALUES('store@example.test','test','Store','Test') RETURNING id::text`).Scan(&owner))
-	must(db.QueryRow(ctx, `INSERT INTO venues(owner_user_id,slug,name,address_line1,city,country_code,status,settings)
- VALUES($1,'store-test','Store','Main','Bratislava','SK','active','{"preorder_enabled":true}') RETURNING id::text`, owner).Scan(&venue))
-	must(db.QueryRow(ctx, `INSERT INTO menu_categories(venue_id,name) VALUES($1,'Food') RETURNING id::text`, venue).Scan(&category))
-	must(db.QueryRow(ctx, `INSERT INTO venue_layouts(venue_id,name) VALUES($1,'Main') RETURNING id::text`, venue).Scan(&layout))
-	must(db.QueryRow(ctx, `INSERT INTO venue_tables(venue_id,layout_id,identifier,seats,qr_token_hash) VALUES($1,$2,'01',4,'store-qr') RETURNING id::text`, venue, layout).Scan(&table))
+	var category, layout, table string
+	owner := seedUser(t, db, "store@example.test", "")
+	venue := seedVenue(t, db, owner, venueSeed{Slug: "store-test", Name: "Store", Settings: `{"preorder_enabled":true}`})
+	must(t, db.QueryRow(ctx, `INSERT INTO menu_categories(venue_id,name) VALUES($1,'Food') RETURNING id::text`, venue).Scan(&category))
+	must(t, db.QueryRow(ctx, `INSERT INTO venue_layouts(venue_id,name) VALUES($1,'Main') RETURNING id::text`, venue).Scan(&layout))
+	must(t, db.QueryRow(ctx, `INSERT INTO venue_tables(venue_id,layout_id,identifier,seats,qr_token_hash) VALUES($1,$2,'01',4,'store-qr') RETURNING id::text`, venue, layout).Scan(&table))
 	items := make([]reservations.PreorderItem, 10)
 	for i := range items {
 		var id string
 		price := money.Minor(100 + i)
-		must(db.QueryRow(ctx, `INSERT INTO menu_items(venue_id,category_id,name,price_minor) VALUES($1,$2,$3,$4) RETURNING id::text`, venue, category, fmt.Sprintf("Dish %d", i), price).Scan(&id))
+		must(t, db.QueryRow(ctx, `INSERT INTO menu_items(venue_id,category_id,name,price_minor) VALUES($1,$2,$3,$4) RETURNING id::text`, venue, category, fmt.Sprintf("Dish %d", i), price).Scan(&id))
 		items[i] = reservations.PreorderItem{MenuItemID: id, Quantity: i%3 + 1, ExpectedPriceMinor: price}
 	}
 	return db, venue, category, table, items

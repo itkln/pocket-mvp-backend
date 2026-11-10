@@ -3,10 +3,11 @@ package httpapi
 import (
 	"errors"
 	"net/http"
-	"pocket-mvp-backend/internal/appfault"
-	"pocket-mvp-backend/internal/modules/ordering"
 	"strconv"
 	"strings"
+
+	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/modules/ordering"
 )
 
 func (api *API) listOrders(w http.ResponseWriter, r *http.Request) {
