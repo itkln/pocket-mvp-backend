@@ -32,7 +32,7 @@ func NewService(repository Repository, authorizer VenueAuthorizer) *Service {
 
 // Floor reads the live floor. Like the plan itself, it belongs to those who run the floor.
 func (s *Service) Floor(ctx context.Context, userID, venueID string) (Floor, error) {
-	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageFloor); err != nil {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.SeatGuests); err != nil {
 		return Floor{}, err
 	}
 	return s.repository.Floor(ctx, venueID)
@@ -41,7 +41,7 @@ func (s *Service) Floor(ctx context.Context, userID, venueID string) (Floor, err
 // SeatReservation seats a confirmed booking — at its own table, or at tableIdentifier when the
 // staff choose another one. Seating an already seated booking again changes nothing.
 func (s *Service) SeatReservation(ctx context.Context, userID, venueID, reservationID, tableIdentifier string) (Floor, error) {
-	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageFloor); err != nil {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.SeatGuests); err != nil {
 		return Floor{}, err
 	}
 	tableIdentifier = strings.TrimSpace(tableIdentifier)
@@ -56,7 +56,7 @@ func (s *Service) SeatReservation(ctx context.Context, userID, venueID, reservat
 
 // SeatWalkIn seats a party without a booking at a free table.
 func (s *Service) SeatWalkIn(ctx context.Context, userID, venueID string, input WalkIn) (Floor, error) {
-	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageFloor); err != nil {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.SeatGuests); err != nil {
 		return Floor{}, err
 	}
 	input.TableIdentifier = strings.TrimSpace(input.TableIdentifier)
@@ -73,7 +73,7 @@ func (s *Service) SeatWalkIn(ctx context.Context, userID, venueID string, input 
 
 // Release frees a table when its party leaves. An open bill stays with the table until it is paid.
 func (s *Service) Release(ctx context.Context, userID, venueID, tableIdentifier string) (Floor, error) {
-	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageFloor); err != nil {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.SeatGuests); err != nil {
 		return Floor{}, err
 	}
 	tableIdentifier = strings.TrimSpace(tableIdentifier)

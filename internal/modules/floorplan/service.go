@@ -22,8 +22,10 @@ func NewService(repository Repository, authorizer VenueAuthorizer) *Service {
 	return &Service{repository: repository, authorizer: authorizer}
 }
 
+// Get reads the plan. Everyone who seats guests sees the floor it is drawn on; editing it
+// (Save) stays with ManageFloor.
 func (s *Service) Get(ctx context.Context, userID, venueID string) (json.RawMessage, error) {
-	if err := s.authorizer.Require(ctx, userID, venueID, access.ManageFloor); err != nil {
+	if err := s.authorizer.Require(ctx, userID, venueID, access.SeatGuests); err != nil {
 		return nil, err
 	}
 	return s.repository.Get(ctx, venueID)

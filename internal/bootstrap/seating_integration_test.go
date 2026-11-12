@@ -144,12 +144,27 @@ func TestSeatingIntegration(t *testing.T) {
 		t.Fatalf("finished booking seated again: %v", err)
 	}
 
-	// Waiters, strangers and other venues get 404.
-	if _, err = floor.Floor(ctx, waiter, venue); !errors.Is(err, appfault.ErrNotFound) {
+	// Waiters seat guests and free tables on the live floor and read the plan, but cannot edit
+	// the plan or issue QR codes (V-SRV-02). Strangers and other venues get 404.
+	if _, err = floor.Floor(ctx, waiter, venue); err != nil {
 		t.Fatalf("waiter read the floor: %v", err)
 	}
-	if _, err = floor.Release(ctx, waiter, venue, "03"); !errors.Is(err, appfault.ErrNotFound) {
+	if _, err = plan.Get(ctx, waiter, venue); err != nil {
+		t.Fatalf("waiter read the plan: %v", err)
+	}
+	if _, err = floor.Release(ctx, waiter, venue, "03"); err != nil {
 		t.Fatalf("waiter released a table: %v", err)
+	}
+	walkIn, err := floor.SeatWalkIn(ctx, waiter, venue, seating.WalkIn{TableIdentifier: "03", Guests: 2})
+	if err != nil || state(walkIn, "03").State != "occupied" {
+		t.Fatalf("waiter seated a walk-in: %v", err)
+	}
+	if _, err = plan.Save(ctx, waiter, venue, json.RawMessage(`[]`)); !errors.Is(err, appfault.ErrNotFound) {
+		t.Fatalf("waiter edited the plan: %v", err)
+	}
+	stranger := seedUser(t, db, "stranger@seating.test", "customer")
+	if _, err = floor.Floor(ctx, stranger, venue); !errors.Is(err, appfault.ErrNotFound) {
+		t.Fatalf("stranger read the floor: %v", err)
 	}
 	third := seedBooking(t, db, venue, tableTwo, "Clara", "3 hours")
 	if _, err = floor.SeatReservation(ctx, owner, other, third, ""); !errors.Is(err, appfault.ErrNotFound) {

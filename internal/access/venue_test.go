@@ -18,14 +18,14 @@ func TestRoleCapabilities(t *testing.T) {
 		role    string
 		allowed []Capability
 	}{
-		{RoleOwner, []Capability{ManageOrders, SettleBills, ManageMenu, ManageFloor, ManageSettings, ManageVenue}},
-		{RoleManager, []Capability{ManageOrders, SettleBills, ManageMenu, ManageFloor, ManageSettings}},
-		{RoleWaiter, []Capability{ManageOrders, SettleBills}},
+		{RoleOwner, []Capability{ManageOrders, SettleBills, SeatGuests, ManageMenu, ManageFloor, ManageSettings, ManageVenue}},
+		{RoleManager, []Capability{ManageOrders, SettleBills, SeatGuests, ManageMenu, ManageFloor, ManageSettings}},
+		{RoleWaiter, []Capability{ManageOrders, SettleBills, SeatGuests}},
 		{"kitchen", nil},
 		{"viewer", nil},
 		{"", nil},
 	} {
-		for _, capability := range []Capability{ManageOrders, SettleBills, ManageMenu, ManageFloor, ManageSettings, ManageVenue} {
+		for _, capability := range []Capability{ManageOrders, SettleBills, SeatGuests, ManageMenu, ManageFloor, ManageSettings, ManageVenue} {
 			want := false
 			for _, allowed := range test.allowed {
 				want = want || allowed == capability

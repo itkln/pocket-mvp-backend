@@ -128,7 +128,8 @@ func (api *API) venueRoutes(venue chi.Router) {
 	venue.Patch("/menu-items/{itemID}", api.updateMenuItem)
 	venue.Delete("/menu-items/{itemID}", api.deleteMenuItem)
 
-	// Floor: managers and the owner.
+	// Floor plan editor and QR codes: managers and the owner. Reading the plan and the live
+	// floor (seating, freeing tables): the whole team.
 	venue.Get("/floor-plan", api.getFloorPlan)
 	venue.Put("/floor-plan", api.updateFloorPlan)
 	venue.Post("/table-qr", api.issueTableQR)
