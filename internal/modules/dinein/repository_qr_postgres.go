@@ -22,7 +22,8 @@ func (r *PostgresRepository) IssueQR(ctx context.Context, venueID, identifier st
 	var qr QRCode
 	err = tx.QueryRow(ctx, `
  SELECT t.id::text, t.venue_id::text, t.identifier, t.qr_version, v.currency, v.name,
-   COALESCE(t.qr_token_encrypted, ''), COALESCE(v.settings->>'dine_in', 'true') = 'true'
+   COALESCE(t.qr_token_encrypted, ''),
+   v.status = 'active' AND COALESCE(v.settings->>'dine_in', 'true') = 'true'
  FROM venue_tables t JOIN venues v ON v.id = t.venue_id
  WHERE t.venue_id = $1 AND t.identifier = $2 AND t.deleted_at IS NULL AND t.status <> 'disabled'
  FOR UPDATE OF t`, venueID, identifier).Scan(
@@ -58,11 +59,13 @@ func (r *PostgresRepository) IssueQR(ctx context.Context, venueID, identifier st
 
 const tableQuery = `
  SELECT t.id::text, t.venue_id::text, t.identifier, t.qr_version, v.currency, v.name,
-   COALESCE(v.settings->>'dine_in', 'true') = 'true'
+   v.status = 'active' AND COALESCE(v.settings->>'dine_in', 'true') = 'true'
  FROM venue_tables t JOIN venues v ON v.id = t.venue_id
  WHERE t.qr_token_hash = $1 AND t.qr_token_encrypted IS NOT NULL
    AND t.deleted_at IS NULL AND t.status <> 'disabled'
-   AND v.status = 'active' AND v.deleted_at IS NULL
+   -- A paused venue keeps its QR codes readable for seated guests (bill, history) but takes no
+   -- new orders: ordering_enabled is false. Draft and closed venues have no valid codes.
+   AND v.status IN ('active', 'paused') AND v.deleted_at IS NULL
    AND (NOT (v.settings ? 'floor_plan') OR EXISTS (
      SELECT 1 FROM jsonb_array_elements(v.settings->'floor_plan') f,
        jsonb_array_elements(COALESCE(f->'tables', '[]'::jsonb)) ft

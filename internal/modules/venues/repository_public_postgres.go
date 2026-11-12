@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/openinghours"
 )
 
 func (r *PostgresRepository) IsPublished(ctx context.Context, venueID string) (bool, error) {
@@ -92,7 +93,7 @@ func (r *PostgresRepository) GetPublished(ctx context.Context, venueID string) (
 		         'spa-massage', 'beauty', 'masterclasses'
 		       ) THEN v.settings ->> 'public_category' ELSE 'restaurants' END,
 		       COALESCE(v.cuisine_type, ''), v.address_line1, v.city, v.country_code,
-		       v.settings, COALESCE(ROUND(AVG(reviews.rating)::numeric, 1)::float8, 0),
+		       COALESCE(v.phone, ''), COALESCE(v.email, ''), v.timezone, v.settings, COALESCE(ROUND(AVG(reviews.rating)::numeric, 1)::float8, 0),
 		       COUNT(reviews.id)::int, v.created_at
 		FROM venues v
 		LEFT JOIN reviews ON reviews.venue_id = v.id AND reviews.status = 'published'
@@ -101,7 +102,8 @@ func (r *PostgresRepository) GetPublished(ctx context.Context, venueID string) (
 	var item PublicVenue
 	var settings []byte
 	err := row.Scan(&item.ID, &item.Slug, &item.Name, &item.Description, &item.CategorySlug,
-		&item.CuisineType, &item.Address, &item.City, &item.CountryCode, &settings,
+		&item.CuisineType, &item.Address, &item.City, &item.CountryCode,
+		&item.Phone, &item.Email, &item.Timezone, &settings,
 		&item.Rating, &item.ReviewCount, &item.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return PublicVenue{}, appfault.ErrNotFound
@@ -113,9 +115,16 @@ func (r *PostgresRepository) GetPublished(ctx context.Context, venueID string) (
 	if err := json.Unmarshal(settings, &publicSettings); err != nil {
 		return PublicVenue{}, fmt.Errorf("decode public venue settings: %w", err)
 	}
+	if item.OpeningHours, err = openinghours.Parse(publicSettings[openinghours.SettingKey]); err != nil {
+		item.OpeningHours = openinghours.Default()
+	}
 	item.ImageURL = settingString(publicSettings, "cover_image_url")
 	item.LogoURL = settingString(publicSettings, "logo_image_url")
 	item.PreorderEnabled = settingBool(publicSettings, "preorder_enabled")
+	item.BookingEnabled = true
+	if enabled, ok := publicSettings["schedule_enabled"].(bool); ok {
+		item.BookingEnabled = enabled
+	}
 	item.Tags = settingStrings(publicSettings, "public_tags")
 	item.Filters = settingStrings(publicSettings, "public_filters")
 	if item.Tags == nil {

@@ -91,3 +91,30 @@ func TestGeneratedSlugNeverEndsInSeparator(t *testing.T) {
 }
 
 func (r *repositorySpy) ListWorkplaces(context.Context, string) ([]Venue, error) { return nil, nil }
+
+// Opening hours and the timezone must be usable by bookings; the legacy preorder switch is renamed.
+func TestValidInputChecksHoursTimezoneAndPreorderKey(t *testing.T) {
+	week := map[string]any{}
+	for _, day := range []string{"mon", "tue", "wed", "thu", "fri", "sat"} {
+		week[day] = map[string]any{"open": "10:00", "close": "22:00"}
+	}
+	week["sun"] = nil
+	input := normalizeInput(Input{Name: "Mokka", City: "Bratislava", Settings: map[string]any{
+		"opening_hours": week, "preorder": false,
+	}})
+	if !validInput(input) {
+		t.Fatal("a full week should be valid")
+	}
+	if _, legacy := input.Settings["preorder"]; legacy || input.Settings["preorder_enabled"] != false {
+		t.Fatalf("legacy preorder key kept: %#v", input.Settings)
+	}
+	week["mon"] = map[string]any{"open": "22:00", "close": "10:00"}
+	if validInput(input) {
+		t.Fatal("closing before opening was accepted")
+	}
+	week["mon"] = map[string]any{"open": "10:00", "close": "22:00"}
+	input.Timezone = "Mars/Olympus"
+	if validInput(input) {
+		t.Fatal("unknown timezone was accepted")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"pocket-mvp-backend/internal/openinghours"
 	"pocket-mvp-backend/internal/validate"
 
 	"pocket-mvp-backend/internal/appfault"
@@ -30,6 +31,8 @@ type Venue struct {
 	Timezone        string
 	ScheduleEnabled bool
 	SameDayBooking  bool
+	// Hours: the weekly opening hours; nil means the default week.
+	Hours openinghours.Week
 }
 
 type Slot struct {
@@ -94,9 +97,15 @@ func (s *Service) Get(ctx context.Context, venueID, date string, guests int) (Re
 	if !venue.ScheduleEnabled || (selected.Equal(today) && !venue.SameDayBooking) {
 		return result, nil
 	}
-	// The configured MVP booking window is 09:00–22:00 in the venue's timezone.
-	open := time.Date(selected.Year(), selected.Month(), selected.Day(), 9, 0, 0, 0, location)
-	close := time.Date(selected.Year(), selected.Month(), selected.Day(), 22, 0, 0, 0, location)
+	// Bookings start and end inside the day's opening hours, in the venue's timezone.
+	hours := venue.Hours
+	if hours == nil {
+		hours = openinghours.Default()
+	}
+	open, close, isOpen := hours.Window(selected, location)
+	if !isOpen {
+		return result, nil
+	}
 	tables, err := s.repository.ListTables(ctx, venueID, open, close)
 	if err != nil {
 		return Result{}, err
@@ -107,7 +116,7 @@ func (s *Service) Get(ctx context.Context, venueID, date string, guests int) (Re
 			continue
 		}
 		// Skip invalid or repeated local clock times at DST transitions.
-		if start.In(location).YearDay() != selected.YearDay() || start.In(location).Hour() < 9 {
+		if start.In(location).YearDay() != selected.YearDay() || start.Before(open) {
 			continue
 		}
 		slot := Slot{Time: start.In(location).Format("15:04"), StartsAt: start, EndsAt: end, Tables: []Table{}}

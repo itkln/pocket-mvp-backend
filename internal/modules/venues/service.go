@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"pocket-mvp-backend/internal/lifecycle"
+	"pocket-mvp-backend/internal/openinghours"
 	"pocket-mvp-backend/internal/validate"
 
 	"pocket-mvp-backend/internal/access"
@@ -89,6 +91,12 @@ func (s *Service) Create(ctx context.Context, ownerID string, input Input) (Venu
 	if !validInput(input) {
 		return Venue{}, appfault.ErrInvalidInput
 	}
+	// A new venue starts with the switches Vendor shows as on, stored explicitly so Dish agrees.
+	for key, value := range newVenueSettings {
+		if _, set := input.Settings[key]; !set {
+			input.Settings[key] = value
+		}
+	}
 	slug, err := uniqueSlug(input.Name)
 	if err != nil {
 		return Venue{}, err
@@ -155,10 +163,30 @@ func normalizeInput(input Input) Input {
 	if input.Settings == nil {
 		input.Settings = map[string]any{}
 	}
+	// Older Vendor builds saved the preorder switch as "preorder"; Dish reads "preorder_enabled".
+	if legacy, ok := input.Settings["preorder"]; ok {
+		if _, set := input.Settings["preorder_enabled"]; !set {
+			input.Settings["preorder_enabled"] = legacy
+		}
+		delete(input.Settings, "preorder")
+	}
 	return input
 }
 
+// newVenueSettings are the defaults of the Vendor switches that Dish and bookings read.
+var newVenueSettings = map[string]any{
+	"schedule_enabled": true, "same_day_booking": true, "dine_in": true, "preorder_enabled": true,
+}
+
 func validInput(input Input) bool {
+	if hours, ok := input.Settings[openinghours.SettingKey]; ok {
+		if _, err := openinghours.Parse(hours); err != nil {
+			return false
+		}
+	}
+	if _, err := time.LoadLocation(input.Timezone); err != nil {
+		return false
+	}
 	return input.Name != "" && input.City != "" && len(input.CountryCode) == 2 && len(input.Currency) == 3 &&
 		validate.OneOf(input.Status, lifecycle.VenueStatuses...)
 }

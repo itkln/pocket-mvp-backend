@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"pocket-mvp-backend/internal/money"
+	"pocket-mvp-backend/internal/openinghours"
 )
 
 type Venue struct {
@@ -42,26 +43,33 @@ type Input struct {
 	Settings    map[string]any `json:"settings"`
 }
 
-// PublicVenue is the read model exposed to Pocket Spots. It deliberately
-// excludes owner contact details and private venue settings.
+// PublicVenue is the read model exposed to Pocket Dish. It carries the venue's public contacts
+// and opening hours from the Vendor profile, but no owner details or private settings.
 type PublicVenue struct {
-	ID              string    `json:"id"`
-	Slug            string    `json:"slug"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description,omitempty"`
-	CategorySlug    string    `json:"category_slug"`
-	CuisineType     string    `json:"cuisine_type,omitempty"`
-	Address         string    `json:"address"`
-	City            string    `json:"city"`
-	CountryCode     string    `json:"country_code"`
-	ImageURL        string    `json:"image_url,omitempty"`
-	LogoURL         string    `json:"logo_url,omitempty"`
-	Rating          float64   `json:"rating"`
-	ReviewCount     int       `json:"review_count"`
-	Tags            []string  `json:"tags"`
-	Filters         []string  `json:"filters"`
-	PreorderEnabled bool      `json:"preorder_enabled"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID           string `json:"id"`
+	Slug         string `json:"slug"`
+	Name         string `json:"name"`
+	Description  string `json:"description,omitempty"`
+	CategorySlug string `json:"category_slug"`
+	CuisineType  string `json:"cuisine_type,omitempty"`
+	Address      string `json:"address"`
+	City         string `json:"city"`
+	CountryCode  string `json:"country_code"`
+	Phone        string `json:"phone,omitempty"`
+	Email        string `json:"email,omitempty"`
+	Timezone     string `json:"timezone"`
+	// OpeningHours: every day of the week, null when closed.
+	OpeningHours    openinghours.Week `json:"opening_hours"`
+	ImageURL        string            `json:"image_url,omitempty"`
+	LogoURL         string            `json:"logo_url,omitempty"`
+	Rating          float64           `json:"rating"`
+	ReviewCount     int               `json:"review_count"`
+	Tags            []string          `json:"tags"`
+	Filters         []string          `json:"filters"`
+	PreorderEnabled bool              `json:"preorder_enabled"`
+	// BookingEnabled: the Vendor "Онлайн-бронирование" switch (settings.schedule_enabled).
+	BookingEnabled bool      `json:"booking_enabled"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // PublicMenu exposes only visible, available items of a published venue.

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/openinghours"
 )
 
 const testVenueID = "11111111-1111-4111-8111-111111111111"
@@ -76,5 +77,32 @@ func TestAvailabilityRespectsSameDaySetting(t *testing.T) {
 	result, err := service.Get(context.Background(), testVenueID, "", 2)
 	if err != nil || len(result.Slots) != 0 {
 		t.Fatalf("same day should be closed: %+v, %v", result, err)
+	}
+}
+
+// Slots follow the venue's opening hours: none on a closed day, and on an open one they start at
+// opening time and end by closing time.
+func TestAvailabilityFollowsOpeningHours(t *testing.T) {
+	hours := openinghours.Default()
+	hours["sat"] = &openinghours.Day{Open: "12:00", Close: "16:00"}
+	hours["sun"] = nil
+	service := NewService(repositoryStub{
+		venue:  Venue{Timezone: "UTC", ScheduleEnabled: true, Hours: hours},
+		tables: []Table{{ID: "one", Seats: 4, Status: "available"}},
+	})
+	service.now = func() time.Time { return time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC) }
+	result, err := service.Get(context.Background(), testVenueID, "2026-10-03", 2) // Saturday
+	if err != nil {
+		t.Fatal(err)
+	}
+	var times []string
+	for _, slot := range result.Slots {
+		times = append(times, slot.Time)
+	}
+	if len(times) != 5 || times[0] != "12:00" || times[4] != "14:00" {
+		t.Fatalf("saturday 12:00–16:00 slots: %v", times)
+	}
+	if result, err = service.Get(context.Background(), testVenueID, "2026-10-04", 2); err != nil || len(result.Slots) != 0 {
+		t.Fatalf("closed sunday: %+v, %v", result.Slots, err)
 	}
 }

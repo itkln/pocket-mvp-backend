@@ -2,6 +2,7 @@ package availability
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/openinghours"
 )
 
 type PostgresRepository struct{ db *pgxpool.Pool }
@@ -17,18 +19,30 @@ func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository { return &Postg
 
 func (r *PostgresRepository) GetVenue(ctx context.Context, venueID string) (Venue, error) {
 	var venue Venue
+	var hours []byte
 	err := r.db.QueryRow(ctx, `
 		SELECT timezone,
-		       COALESCE((settings ->> 'schedule_enabled')::boolean, false),
-		       COALESCE((settings ->> 'same_day_booking')::boolean, false)
+		       COALESCE((settings ->> 'schedule_enabled')::boolean, true),
+		       COALESCE((settings ->> 'same_day_booking')::boolean, true),
+		       settings -> 'opening_hours'
 		FROM venues
 		WHERE id = $1 AND status = 'active' AND deleted_at IS NULL
 		  AND COALESCE(settings ->> 'public_category', 'restaurants') = 'restaurants'`, venueID,
-	).Scan(&venue.Timezone, &venue.ScheduleEnabled, &venue.SameDayBooking)
+	).Scan(&venue.Timezone, &venue.ScheduleEnabled, &venue.SameDayBooking, &hours)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Venue{}, appfault.ErrNotFound
 	}
-	return venue, err
+	if err != nil {
+		return Venue{}, err
+	}
+	var stored any
+	if len(hours) > 0 && json.Unmarshal(hours, &stored) != nil {
+		stored = nil
+	}
+	if venue.Hours, err = openinghours.Parse(stored); err != nil {
+		venue.Hours = openinghours.Default()
+	}
+	return venue, nil
 }
 
 func (r *PostgresRepository) ListTables(ctx context.Context, venueID string, open, close time.Time) ([]Table, error) {

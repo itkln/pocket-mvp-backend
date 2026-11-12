@@ -118,7 +118,7 @@ func mainVenueSettings() map[string]any {
 		"public_tags":         []string{"Стол через 20 мин", "Предзаказ доступен"},
 		"public_search_terms": "ресторан бистро европейская кухня",
 		"schedule_enabled":    true, "same_day_booking": true,
-		"dine_in_enabled": true, "preorder_enabled": true,
+		"dine_in": true, "preorder_enabled": true,
 		"floor_plan": []map[string]any{
 			{"id": "floor-main-1", "name": "1 этаж", "tables": []map[string]any{
 				{"id": "01", "seats": 2, "x": 8, "y": 13, "state": "free"},
@@ -155,7 +155,7 @@ func secondaryVenueSettings() map[string]any {
 		"public_tags":         []string{"Открыто сейчас", "Столик у окна"},
 		"public_search_terms": "кофейня кофе десерты обжарка",
 		"schedule_enabled":    true, "same_day_booking": false,
-		"dine_in_enabled": true, "preorder_enabled": false,
+		"dine_in": true, "preorder_enabled": false,
 		"floor_plan": []map[string]any{{"id": "floor-coffee-1", "name": "Основной зал", "tables": []map[string]any{
 			{"id": "C1", "seats": 2, "x": 15, "y": 20, "state": "free"},
 			{"id": "C2", "seats": 2, "x": 48, "y": 20, "state": "busy"},
