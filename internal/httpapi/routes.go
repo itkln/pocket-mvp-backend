@@ -54,6 +54,7 @@ func (api *API) publicRoutes(public chi.Router) {
 
 	public.Post("/table-qr/resolve", api.resolveTableQR)
 	public.Post("/table-bill", api.currentTableBill)
+	public.Post("/table-bill/call-staff", api.callStaffToTable)
 	public.Post("/table-orders", api.createTableOrder)
 	public.Post("/table-orders/lookup", api.lookupTableOrder)
 	public.Post("/table-orders/history", api.tableOrderHistory)
@@ -110,6 +111,10 @@ func (api *API) venueRoutes(venue chi.Router) {
 	venue.Patch("/orders/{orderID}", api.updateOrderStatus)
 	venue.Get("/order-alert-settings", api.getOrderAlertSettings)
 	venue.Put("/order-alert-settings", api.saveOrderAlertSettings)
+
+	// Table bills: guests' calls for the bill and in-person settlement — the whole team.
+	venue.Get("/bills", api.listOpenBills)
+	venue.Post("/bills/{billID}/settle", api.settleBill)
 
 	// Menu: managers and the owner.
 	venue.Get("/categories", api.listCategories)

@@ -49,6 +49,8 @@ type Bill struct {
 	ID         string      `json:"id"`
 	OpenedAt   time.Time   `json:"opened_at"`
 	TotalMinor money.Minor `json:"total_minor"`
+	// PaymentRequestedAt: the guests called the staff to settle (V-TBL-05).
+	PaymentRequestedAt *time.Time `json:"payment_requested_at,omitempty"`
 }
 
 // Table is the live state of one table, matched to the floor plan by its identifier.

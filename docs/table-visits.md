@@ -6,7 +6,7 @@ Failed payment may return `payment_pending` to `open` in the future payment work
 `open` and `payment_pending` are active; the partial unique index permits only one
 active bill per table. Settling a visit must set `closed_at`, retain orders and
 must not update kitchen statuses. Staff settlement and acquiring belong to
-V-TBL-05/06; this task does not introduce an unauthenticated close endpoint.
+V-TBL-05 (below) and V-TBL-06; there is no unauthenticated close endpoint.
 
 ## Creation and concurrency
 
@@ -60,5 +60,47 @@ device goes back online and on «Обновить счёт», and shows the time
 refresh keeps the last bill on screen with a «no connection» notice and a retry; a revoked QR
 removes the bill. When the visit is settled while the guest watches, the screen says «Счёт закрыт»
 and offers the menu (a new order opens a new visit). `payment_pending` shows that the bill is
-being settled. Tests:
+being settled. Until online payment (V-TBL-06), paying in cash calls the staff (below). Tests:
 `frontend/features/pocket/customer/table-entry.test.tsx`.
+
+## Calling the staff and settling in person (V-TBL-05)
+
+**Guest.** Choosing «Оплата наличными» and «Оплатить {amount}» calls
+`POST /api/v1/public/table-bill/call-staff {token}` (Apple Pay, Google Pay, card and «Разделить
+оплату» are a design mock-up until V-TBL-06/08). It sets
+`bills.payment_requested_at` once (repeated calls, from any phone, keep the first time and write
+one `bill.payment_requested` audit row) and returns the bill. Without an active visit it answers
+`404 not_found`. The call is **not a payment**: the visit stays `open`, guests may still order,
+and nothing is closed if the guest leaves the page. The bill shows «Сотрудник вызван» with the
+call time until a staff member confirms; then the bill disappears and the screen says
+«Оплата подтверждена» with a current bill of 0.
+
+**Staff (Vendor, «Заказы»/«Сервис»).** Capability `bills` (`access.SettleBills`): owner,
+manager and waiter. There is no kitchen role (removed in `000025`), so the kitchen cannot settle.
+- `GET /api/v1/venues/{venueID}/bills` — active table visits, called ones first, each with
+  its dishes and amounts computed like the guest's bill. Vendor polls it every 10 s while
+  visible, rings and shows «Стол N просит рассчитать» for a new call; all open bills are one
+  click away.
+- `POST /api/v1/venues/{venueID}/bills/{billID}/settle {expected_total_minor, method}` with
+  `method` `cash` or `card`. In one transaction it locks the bill row, recomputes the amount and
+  refuses `409 bill_changed` if it differs from what the staff member checked (Vendor reloads the
+  bill and requires «Сумма сверена» before confirming again). Otherwise it inserts a `payments`
+  row (`provider='staff'`, `provider_payment_id`=bill ID, `status='paid'`, amount, currency,
+  `method`, `recorded_by_user_id`, `paid_at`), sets the bill `paid` with `closed_at`, brings the
+  cached totals in line and writes a `bill.settled` audit row. Orders and kitchen statuses are
+  not touched. A visit whose every dish was cancelled closes as `void` without a payment.
+- A repeated confirmation returns the recorded settlement (same amount, method and time) and
+  writes nothing; the unique `(provider, provider_payment_id)` also allows one staff payment per
+  bill. `payment_pending` or an online payment in progress → `409 bill_payment_in_progress`; a
+  visit closed some other way → `409 bill_closed`.
+
+**Order vs. settlement race.** Order creation and settlement both lock the bill row. An order
+committed first changes the amount (settlement refused, check again); an order arriving after
+the settlement finds no open bill and opens a new visit. An order is never added to a closing bill.
+
+Known limit: staff cancelling an item does not lock the bill, so a cancellation committed in the
+same instant as a settlement may not be reflected in the amount paid.
+
+Migration `000029_table_bill_settlement`. Tests:
+`internal/bootstrap/bill_settlement_integration_test.go` (`TestTableBillSettlementIntegration`),
+`frontend/features/pocket/owner/table-bills.test.tsx`, `table-entry.test.tsx`.

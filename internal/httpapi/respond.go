@@ -103,6 +103,14 @@ var tableOrderErrors = []errorRule{
 	{nil, reply{http.StatusInternalServerError, "internal_server_error", "The order could not be saved."}},
 }
 
+// billSettlementErrors: confirming in Vendor that a table bill was paid in person.
+var billSettlementErrors = []errorRule{
+	{dinein.ErrBillChanged, reply{http.StatusConflict, "bill_changed", "The bill changed after you opened it. Check the new amount with the guests."}},
+	{dinein.ErrBillLocked, reply{http.StatusConflict, "bill_payment_in_progress", "An online payment for this bill is in progress."}},
+	{dinein.ErrBillClosed, reply{http.StatusConflict, "bill_closed", "This bill is already closed."}},
+	{appfault.ErrNotFound, reply{http.StatusNotFound, "not_found", "The bill was not found."}},
+}
+
 // seatingErrors: seating guests on the venue floor.
 var seatingErrors = []errorRule{
 	{seating.ErrTableOccupied, reply{http.StatusConflict, "table_occupied", "Guests are already seated at this table."}},

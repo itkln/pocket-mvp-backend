@@ -98,6 +98,9 @@ type OrderingService interface {
 
 type DineInService interface {
 	CurrentBill(context.Context, string) (*dinein.Bill, error)
+	CallStaff(context.Context, string) (*dinein.Bill, error)
+	OpenBills(context.Context, string, string) ([]dinein.Bill, error)
+	Settle(context.Context, string, string, string, dinein.SettleInput) (dinein.Settlement, error)
 	OwnerQRCode(context.Context, string, string, string, bool) (dinein.QRCode, error)
 	Resolve(context.Context, string) (dinein.Table, error)
 	Create(context.Context, dinein.CreateInput) (dinein.Order, error)

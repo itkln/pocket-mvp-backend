@@ -44,7 +44,7 @@ func (r *PostgresRepository) Floor(ctx context.Context, venueID string) (Floor, 
 	rows, err := tx.Query(ctx, `
 		SELECT t.id::text, t.identifier, t.seats,
 		       party.id, party.reservation_code, party.guest_name, party.guest_count, party.seated_at, party.walk_in,
-		       bill.id, bill.opened_at, bill.total_minor
+		       bill.id, bill.opened_at, bill.total_minor, bill.payment_requested_at
 		FROM venue_tables t
 		LEFT JOIN LATERAL (
 		    SELECT r.id::text AS id, r.reservation_code, r.guest_name, r.guest_count,
@@ -54,7 +54,7 @@ func (r *PostgresRepository) Floor(ctx context.Context, venueID string) (Floor, 
 		    ORDER BY r.seated_at DESC NULLS LAST, r.id LIMIT 1
 		) party ON true
 		LEFT JOIN LATERAL (
-		    SELECT b.id::text AS id, b.opened_at, COALESCE((
+		    SELECT b.id::text AS id, b.opened_at, b.payment_requested_at, COALESCE((
 		        SELECT sum(o.total_minor) FROM orders o
 		        WHERE o.bill_id = b.id AND o.status NOT IN ('draft', 'cancelled')
 		    ), 0) AS total_minor
@@ -71,11 +71,11 @@ func (r *PostgresRepository) Floor(ctx context.Context, venueID string) (Floor, 
 		var table Table
 		var partyID, code, guestName, billID *string
 		var guestCount *int
-		var seatedAt, openedAt *time.Time
+		var seatedAt, openedAt, requestedAt *time.Time
 		var walkIn *bool
 		var billTotal *int64
 		if err = rows.Scan(&table.ID, &table.Identifier, &table.Seats, &partyID, &code, &guestName,
-			&guestCount, &seatedAt, &walkIn, &billID, &openedAt, &billTotal); err != nil {
+			&guestCount, &seatedAt, &walkIn, &billID, &openedAt, &billTotal, &requestedAt); err != nil {
 			rows.Close()
 			return Floor{}, err
 		}
@@ -84,7 +84,7 @@ func (r *PostgresRepository) Floor(ctx context.Context, venueID string) (Floor, 
 				GuestCount: *guestCount, SeatedAt: *seatedAt, WalkIn: *walkIn}
 		}
 		if billID != nil {
-			table.Bill = &Bill{ID: *billID, OpenedAt: *openedAt, TotalMinor: money.Minor(*billTotal)}
+			table.Bill = &Bill{ID: *billID, OpenedAt: *openedAt, TotalMinor: money.Minor(*billTotal), PaymentRequestedAt: requestedAt}
 		}
 		floor.Tables = append(floor.Tables, table)
 	}

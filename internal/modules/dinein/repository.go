@@ -9,6 +9,9 @@ import (
 type TokenFactory func() (encrypted, hash string, err error)
 type Repository interface {
 	CurrentBill(context.Context, string) (*Bill, error)
+	CallStaff(context.Context, string) (*Bill, error)
+	OpenBills(context.Context, string) ([]Bill, error)
+	Settle(context.Context, string, string, string, SettleInput) (Settlement, error)
 	IssueQR(context.Context, string, string, bool, TokenFactory) (QRCode, error)
 	Resolve(context.Context, string) (Table, error)
 	Create(context.Context, string, string, CreateInput) (Order, error)

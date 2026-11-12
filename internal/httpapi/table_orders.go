@@ -135,3 +135,20 @@ func (api *API) currentTableBill(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"bill": bill})
 }
+
+// callStaffToTable: a guest asks the staff to come and settle the table's current bill.
+func (api *API) callStaffToTable(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	var input struct {
+		Token string `json:"token"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	bill, err := api.dineIn.CallStaff(r.Context(), input.Token)
+	if err != nil {
+		api.writeError(w, r, err, tableOrderErrors)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"bill": bill})
+}

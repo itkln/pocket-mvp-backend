@@ -7,6 +7,9 @@ type Capability string
 const (
 	// ManageOrders: the order queue, status changes and cancellation.
 	ManageOrders Capability = "orders"
+	// SettleBills: table bills — the guests' calls for the bill and confirming that a visit was paid
+	// in person (cash or card). Every operational role settles; there is no kitchen role since 000025.
+	SettleBills Capability = "bills"
 	// ManageMenu: menu categories and items, prices, availability (stop list), images, ordering.
 	ManageMenu Capability = "menu"
 	// ManageFloor: the floor plan and table QR codes.
@@ -24,12 +27,13 @@ const (
 	RoleWaiter  = "waiter"
 )
 
-// MVP decision of 2026-11-10 (V-SRV-01, V-BE-02): waiters run orders; managers also run the menu,
+// MVP decision of 2026-11-10 (V-SRV-01, V-BE-02), revised 2026-11-12: waiters run orders and settle
+// table bills; managers also run the menu,
 // the floor and the venue settings; the owner can do everything.
 var roleCapabilities = map[string][]Capability{
-	RoleOwner:   {ManageOrders, ManageMenu, ManageFloor, ManageSettings, ManageVenue},
-	RoleManager: {ManageOrders, ManageMenu, ManageFloor, ManageSettings},
-	RoleWaiter:  {ManageOrders},
+	RoleOwner:   {ManageOrders, SettleBills, ManageMenu, ManageFloor, ManageSettings, ManageVenue},
+	RoleManager: {ManageOrders, SettleBills, ManageMenu, ManageFloor, ManageSettings},
+	RoleWaiter:  {ManageOrders, SettleBills},
 }
 
 // Allows reports whether a venue role has a capability.
