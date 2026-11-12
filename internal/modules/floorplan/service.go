@@ -36,8 +36,5 @@ func (s *Service) Save(ctx context.Context, userID, venueID string, plan json.Ra
 	if len(plan) == 0 || !json.Valid(plan) {
 		return nil, appfault.ErrInvalidInput
 	}
-	if err := s.repository.Save(ctx, venueID, plan); err != nil {
-		return nil, err
-	}
-	return plan, nil
+	return s.repository.Save(ctx, venueID, plan)
 }

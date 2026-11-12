@@ -21,8 +21,14 @@ func (r *PostgresRepository) Dashboard(ctx context.Context, venueID string) (Das
 		  COALESCE((SELECT SUM(total_minor) FROM orders WHERE venue_id = $1 AND status <> 'cancelled' AND created_at >= CURRENT_DATE), 0),
 		  COALESCE((SELECT COUNT(*) FROM orders WHERE venue_id = $1 AND created_at >= CURRENT_DATE), 0),
 		  COALESCE((SELECT AVG(total_minor)::bigint FROM orders WHERE venue_id = $1 AND status <> 'cancelled' AND created_at >= CURRENT_DATE), 0),
-		  COALESCE((SELECT COUNT(*) FROM venue_tables WHERE venue_id = $1 AND status = 'occupied' AND deleted_at IS NULL), 0),
-		  COALESCE((SELECT COUNT(*) FROM venue_tables WHERE venue_id = $1 AND deleted_at IS NULL), 0),
+		  COALESCE((SELECT COUNT(*) FROM venue_tables t
+		    WHERE t.venue_id = $1 AND t.deleted_at IS NULL AND t.status <> 'disabled' AND (
+		      EXISTS (SELECT 1 FROM reservations r WHERE r.venue_table_id = t.id
+		              AND r.status = 'seated' AND r.starts_at > now() - interval '24 hours')
+		      OR EXISTS (SELECT 1 FROM bills b WHERE b.venue_table_id = t.id
+		              AND b.status IN ('open', 'payment_pending')))), 0),
+		  COALESCE((SELECT COUNT(*) FROM venue_tables
+		    WHERE venue_id = $1 AND deleted_at IS NULL AND status <> 'disabled'), 0),
 		  COALESCE((SELECT COUNT(*) FROM orders WHERE venue_id = $1 AND status = 'new'), 0),
 		  COALESCE((SELECT AVG(rating)::float8 FROM reviews WHERE venue_id = $1 AND status = 'published'), 0)`, venueID,
 	).Scan(

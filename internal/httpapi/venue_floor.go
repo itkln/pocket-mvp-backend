@@ -27,7 +27,7 @@ func (api *API) updateFloorPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	plan, err := api.floorPlan.Save(r.Context(), user.ID, pathParam(r, "venueID"), input.FloorPlan)
 	if err != nil {
-		api.writeError(w, r, err)
+		api.writeError(w, r, err, floorPlanErrors)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"floor_plan": plan})

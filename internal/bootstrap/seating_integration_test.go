@@ -42,11 +42,16 @@ func TestSeatingIntegration(t *testing.T) {
 		return seating.Table{}
 	}
 
-	// A plan nobody was seated at yet has no table rows; the floor is simply empty.
+	// Saving the plan creates its tables: the fresh floor lists them all, free.
 	snapshot, err := floor.Floor(ctx, owner, venue)
 	must(t, err)
-	if len(snapshot.Tables) != 0 || len(snapshot.Bookings) != 0 || snapshot.Timezone != "Europe/Bratislava" {
+	if len(snapshot.Tables) != 3 || len(snapshot.Bookings) != 0 || snapshot.Timezone != "Europe/Bratislava" {
 		t.Fatalf("fresh floor: %+v", snapshot)
+	}
+	for _, table := range snapshot.Tables {
+		if table.State != seating.StateFree {
+			t.Fatalf("fresh table is not free: %+v", table)
+		}
 	}
 
 	// A walk-in takes a free table.

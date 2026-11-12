@@ -49,15 +49,7 @@ func Table(ctx context.Context, tx pgx.Tx, venueID, identifier string) error {
 				return appfault.ErrInvalidInput
 			}
 			found = true
-			var layoutID string
-			err = tx.QueryRow(ctx, `
-   SELECT id::text FROM venue_layouts
-   WHERE venue_id = $1 AND name = $2 ORDER BY created_at LIMIT 1`, venueID, floor.Name).Scan(&layoutID)
-			if errors.Is(err, pgx.ErrNoRows) {
-				err = tx.QueryRow(ctx, `
-    INSERT INTO venue_layouts (venue_id, name, is_active)
-    VALUES ($1, $2, false) RETURNING id::text`, venueID, floor.Name).Scan(&layoutID)
-			}
+			layoutID, err := ensureLayout(ctx, tx, venueID, floor.Name)
 			if err != nil {
 				return err
 			}
@@ -66,7 +58,7 @@ func Table(ctx context.Context, tx pgx.Tx, venueID, identifier string) error {
    VALUES ($1, $2, $3, $4, $5, $6, 'unissued:' || gen_random_uuid()::text)
    ON CONFLICT (venue_id, identifier) DO UPDATE SET
      layout_id = EXCLUDED.layout_id, seats = EXCLUDED.seats,
-     position_x = EXCLUDED.position_x, position_y = EXCLUDED.position_y`, venueID, layoutID, identifier, table.Seats, table.X, table.Y)
+     position_x = EXCLUDED.position_x, position_y = EXCLUDED.position_y, deleted_at = NULL`, venueID, layoutID, identifier, table.Seats, table.X, table.Y)
 			if err != nil {
 				return err
 			}

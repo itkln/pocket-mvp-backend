@@ -7,6 +7,7 @@ import (
 
 	"pocket-mvp-backend/internal/appfault"
 	"pocket-mvp-backend/internal/modules/dinein"
+	"pocket-mvp-backend/internal/modules/floorplan"
 	"pocket-mvp-backend/internal/modules/identity"
 	"pocket-mvp-backend/internal/modules/reservations"
 	"pocket-mvp-backend/internal/modules/seating"
@@ -108,6 +109,12 @@ var seatingErrors = []errorRule{
 	{seating.ErrTableReserved, reply{http.StatusConflict, "table_reserved", "This table is booked for this time."}},
 	{seating.ErrNotSeatable, reply{http.StatusConflict, "reservation_not_seatable", "This reservation can no longer be seated."}},
 	{appfault.ErrNotFound, reply{http.StatusNotFound, "not_found", "The table or reservation was not found."}},
+}
+
+// floorPlanErrors: saving the floor plan in the editor.
+var floorPlanErrors = []errorRule{
+	{floorplan.ErrTableInUse, reply{http.StatusConflict, "table_in_use", "A removed table has an upcoming booking, seated guests or an open bill."}},
+	{appfault.ErrInvalidInput, reply{http.StatusUnprocessableEntity, "invalid_input", "Each table needs a unique number and 1 to 50 seats."}},
 }
 
 // writeError answers with the first rule that matches err: the area rules first, then the common
