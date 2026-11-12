@@ -27,6 +27,7 @@ func New(deps Dependencies) http.Handler {
 		feedback:       deps.Feedback,
 		billing:        deps.Billing,
 		floorPlan:      deps.FloorPlan,
+		seating:        deps.Seating,
 		reporting:      deps.Reporting,
 		sessionCookie:  deps.SessionCookie,
 		sessionSecure:  deps.SessionSecure,

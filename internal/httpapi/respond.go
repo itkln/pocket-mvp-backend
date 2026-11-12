@@ -9,6 +9,7 @@ import (
 	"pocket-mvp-backend/internal/modules/dinein"
 	"pocket-mvp-backend/internal/modules/identity"
 	"pocket-mvp-backend/internal/modules/reservations"
+	"pocket-mvp-backend/internal/modules/seating"
 )
 
 // reply is an error response: an HTTP status, a stable code the clients localize, and an English
@@ -99,6 +100,14 @@ var tableOrderErrors = []errorRule{
 	{appfault.ErrNotFound, reply{http.StatusNotFound, "not_found", "Order not found."}},
 	{appfault.ErrConflict, reply{http.StatusConflict, "conflict", "This request was already used for a different order."}},
 	{nil, reply{http.StatusInternalServerError, "internal_server_error", "The order could not be saved."}},
+}
+
+// seatingErrors: seating guests on the venue floor.
+var seatingErrors = []errorRule{
+	{seating.ErrTableOccupied, reply{http.StatusConflict, "table_occupied", "Guests are already seated at this table."}},
+	{seating.ErrTableReserved, reply{http.StatusConflict, "table_reserved", "This table is booked for this time."}},
+	{seating.ErrNotSeatable, reply{http.StatusConflict, "reservation_not_seatable", "This reservation can no longer be seated."}},
+	{appfault.ErrNotFound, reply{http.StatusNotFound, "not_found", "The table or reservation was not found."}},
 }
 
 // writeError answers with the first rule that matches err: the area rules first, then the common

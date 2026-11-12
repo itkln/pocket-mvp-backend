@@ -16,6 +16,7 @@ import (
 	"pocket-mvp-backend/internal/modules/ordering"
 	"pocket-mvp-backend/internal/modules/reporting"
 	"pocket-mvp-backend/internal/modules/reservations"
+	"pocket-mvp-backend/internal/modules/seating"
 	"pocket-mvp-backend/internal/modules/venues"
 	"pocket-mvp-backend/internal/modules/workforce"
 )
@@ -120,6 +121,13 @@ type FloorPlanService interface {
 	Save(context.Context, string, string, json.RawMessage) (json.RawMessage, error)
 }
 
+type SeatingService interface {
+	Floor(context.Context, string, string) (seating.Floor, error)
+	SeatReservation(context.Context, string, string, string, string) (seating.Floor, error)
+	SeatWalkIn(context.Context, string, string, seating.WalkIn) (seating.Floor, error)
+	Release(context.Context, string, string, string) (seating.Floor, error)
+}
+
 type ReportingService interface {
 	Dashboard(context.Context, string, string) (reporting.Dashboard, error)
 }
@@ -141,6 +149,7 @@ type Dependencies struct {
 	Feedback       FeedbackService
 	Billing        BillingService
 	FloorPlan      FloorPlanService
+	Seating        SeatingService
 	Reporting      ReportingService
 	SessionCookie  string
 	SessionSecure  bool
@@ -164,6 +173,7 @@ type API struct {
 	feedback       FeedbackService
 	billing        BillingService
 	floorPlan      FloorPlanService
+	seating        SeatingService
 	reporting      ReportingService
 	sessionCookie  string
 	sessionSecure  bool

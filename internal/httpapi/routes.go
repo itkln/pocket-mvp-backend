@@ -127,6 +127,10 @@ func (api *API) venueRoutes(venue chi.Router) {
 	venue.Get("/floor-plan", api.getFloorPlan)
 	venue.Put("/floor-plan", api.updateFloorPlan)
 	venue.Post("/table-qr", api.issueTableQR)
+	venue.Get("/floor", api.getLiveFloor)
+	venue.Post("/floor/reservations/{reservationID}/seat", api.seatReservation)
+	venue.Post("/floor/walk-ins", api.seatWalkIn)
+	venue.Post("/floor/release", api.releaseTable)
 
 	// The rest: the owner.
 	venue.Get("/dashboard", api.getDashboard)

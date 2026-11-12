@@ -3,6 +3,8 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+
+	"pocket-mvp-backend/internal/modules/seating"
 )
 
 func (api *API) getFloorPlan(w http.ResponseWriter, r *http.Request) {
@@ -47,4 +49,66 @@ func (api *API) issueTableQR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"qr": result})
+}
+
+// getLiveFloor returns the floor as it is now: table states and today's expected bookings.
+func (api *API) getLiveFloor(w http.ResponseWriter, r *http.Request) {
+	floor, err := api.seating.Floor(r.Context(), currentUser(r).ID, pathParam(r, "venueID"))
+	if err != nil {
+		api.writeError(w, r, err, seatingErrors)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"floor": floor})
+}
+
+// seatReservation seats a booked party, at its table or at another one the staff picked.
+func (api *API) seatReservation(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Table string `json:"table_identifier"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	floor, err := api.seating.SeatReservation(r.Context(), currentUser(r).ID, pathParam(r, "venueID"),
+		pathParam(r, "reservationID"), input.Table)
+	if err != nil {
+		api.writeError(w, r, err, seatingErrors)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"floor": floor})
+}
+
+// seatWalkIn seats a party that came without a booking.
+func (api *API) seatWalkIn(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Table     string `json:"table_identifier"`
+		GuestName string `json:"guest_name"`
+		Guests    int    `json:"guests"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	floor, err := api.seating.SeatWalkIn(r.Context(), currentUser(r).ID, pathParam(r, "venueID"),
+		seating.WalkIn{TableIdentifier: input.Table, GuestName: input.GuestName, Guests: input.Guests})
+	if err != nil {
+		api.writeError(w, r, err, seatingErrors)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"floor": floor})
+}
+
+// releaseTable frees a table after its party left.
+func (api *API) releaseTable(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Table string `json:"table_identifier"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	floor, err := api.seating.Release(r.Context(), currentUser(r).ID, pathParam(r, "venueID"), input.Table)
+	if err != nil {
+		api.writeError(w, r, err, seatingErrors)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"floor": floor})
 }

@@ -2,12 +2,12 @@ package dinein
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
 
 	"pocket-mvp-backend/internal/appfault"
+	"pocket-mvp-backend/internal/tablesync"
 )
 
 func (r *PostgresRepository) IssueQR(ctx context.Context, venueID, identifier string, rotate bool, factory TokenFactory) (QRCode, error) {
@@ -16,7 +16,7 @@ func (r *PostgresRepository) IssueQR(ctx context.Context, venueID, identifier st
 		return QRCode{}, err
 	}
 	defer tx.Rollback(ctx)
-	if err = syncFloorPlanTable(ctx, tx, venueID, identifier); err != nil {
+	if err = tablesync.Table(ctx, tx, venueID, identifier); err != nil {
 		return QRCode{}, err
 	}
 	var qr QRCode
@@ -54,67 +54,6 @@ func (r *PostgresRepository) IssueQR(ctx context.Context, venueID, identifier st
 		return QRCode{}, err
 	}
 	return qr, nil
-}
-
-// The saved floor plan is authoritative when present. Keep normalized table
-// records for foreign keys, but never reissue a QR for a removed table.
-func syncFloorPlanTable(ctx context.Context, tx pgx.Tx, venueID, identifier string) error {
-	var raw []byte
-	var hasPlan bool
-	err := tx.QueryRow(ctx, `
- SELECT COALESCE(settings->'floor_plan', '[]'::jsonb), settings ? 'floor_plan'
- FROM venues WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, venueID).Scan(&raw, &hasPlan)
-	if err != nil {
-		return err
-	}
-	var floors []struct {
-		Name   string
-		Tables []struct {
-			ID    string
-			Seats int
-			X, Y  float64
-		}
-	}
-	if err = json.Unmarshal(raw, &floors); err != nil {
-		return err
-	}
-	found := false
-	for _, floor := range floors {
-		for _, table := range floor.Tables {
-			if table.ID != identifier {
-				continue
-			}
-			if found {
-				return appfault.ErrInvalidInput
-			}
-			found = true
-			var layoutID string
-			err = tx.QueryRow(ctx, `
-   SELECT id::text FROM venue_layouts
-   WHERE venue_id = $1 AND name = $2 ORDER BY created_at LIMIT 1`, venueID, floor.Name).Scan(&layoutID)
-			if errors.Is(err, pgx.ErrNoRows) {
-				err = tx.QueryRow(ctx, `
-    INSERT INTO venue_layouts (venue_id, name, is_active)
-    VALUES ($1, $2, false) RETURNING id::text`, venueID, floor.Name).Scan(&layoutID)
-			}
-			if err != nil {
-				return err
-			}
-			_, err = tx.Exec(ctx, `
-   INSERT INTO venue_tables (venue_id, layout_id, identifier, seats, position_x, position_y, qr_token_hash)
-   VALUES ($1, $2, $3, $4, $5, $6, 'unissued:' || gen_random_uuid()::text)
-   ON CONFLICT (venue_id, identifier) DO UPDATE SET
-     layout_id = EXCLUDED.layout_id, seats = EXCLUDED.seats,
-     position_x = EXCLUDED.position_x, position_y = EXCLUDED.position_y`, venueID, layoutID, identifier, table.Seats, table.X, table.Y)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	if hasPlan && !found {
-		return appfault.ErrNotFound
-	}
-	return nil
 }
 
 const tableQuery = `
