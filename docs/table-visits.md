@@ -50,4 +50,15 @@ Run `./scripts/test-integration.sh ./internal/bootstrap ./internal/httpapi ./int
 one bill, independent HTTP reads, rejected substituted table IDs, saved prices,
 order/item cancellations, another table's isolation, paid visit exclusion,
 a fresh visit after settlement, and invalid/revoked QR rejection.
-The QR landing page and guest bill UI remain V-TBL-02/04.
+The QR landing page is V-TBL-02.
+
+## Guest bill screen (V-TBL-04)
+
+Dish `/{locale}/qr/{token}/bill` renders this endpoint only; it never adds up the local cart or
+one device's orders. It refreshes every 15 s while visible, on returning to the page, when the
+device goes back online and on «Обновить счёт», and shows the time of the last update. A failed
+refresh keeps the last bill on screen with a «no connection» notice and a retry; a revoked QR
+removes the bill. When the visit is settled while the guest watches, the screen says «Счёт закрыт»
+and offers the menu (a new order opens a new visit). `payment_pending` shows that the bill is
+being settled. Tests:
+`frontend/features/pocket/customer/table-entry.test.tsx`.
