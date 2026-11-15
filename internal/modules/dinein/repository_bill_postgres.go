@@ -24,7 +24,7 @@ const billSelect = `
  AND EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id=o.id AND oi.status<>'cancelled')),0),
  b.tax_minor,b.service_fee_minor,
  COALESCE((SELECT jsonb_agg(jsonb_build_object('order_id',o.id,'order_number',o.order_number,
- 'name',oi.item_name,'quantity',oi.quantity,'unit_price_minor',oi.unit_price_minor,'total_minor',oi.total_minor)
+ 'menu_item_id',COALESCE(oi.menu_item_id::text,''),'name',oi.item_name,'quantity',oi.quantity,'unit_price_minor',oi.unit_price_minor,'total_minor',oi.total_minor)
  ORDER BY o.created_at,o.id,oi.created_at,oi.id)
  FROM orders o JOIN order_items oi ON oi.order_id=o.id
  WHERE o.bill_id=b.id AND o.venue_id=b.venue_id AND o.venue_table_id=b.venue_table_id

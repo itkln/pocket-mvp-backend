@@ -27,8 +27,10 @@ type Bill struct {
 	Items              []BillItem  `json:"items"`
 }
 type BillItem struct {
-	OrderID        string      `json:"order_id"`
-	OrderNumber    int64       `json:"order_number"`
+	OrderID     string `json:"order_id"`
+	OrderNumber int64  `json:"order_number"`
+	// Empty when the dish was removed from the menu; the guest app shows its photo when present.
+	MenuItemID     string      `json:"menu_item_id,omitempty"`
 	Name           string      `json:"name"`
 	Quantity       int         `json:"quantity"`
 	UnitPriceMinor money.Minor `json:"unit_price_minor"`
